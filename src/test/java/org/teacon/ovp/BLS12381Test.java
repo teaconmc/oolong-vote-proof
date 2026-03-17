@@ -3,7 +3,6 @@ package org.teacon.ovp;
 import com.google.common.io.BaseEncoding;
 import com.google.common.io.Resources;
 import org.junit.jupiter.api.Test;
-import org.teacon.ovp.miracl.core.BLS12381.BLS;
 
 import java.io.IOException;
 import java.util.List;
@@ -16,7 +15,7 @@ class BLS12381Test {
     private static final List<TestVector> G1_VECTORS;
 
     static {
-        var resource = "bls12-381-g1-test-vectors.txt";
+        var resource = "vectors/bls12-381/bls12-381-g1-test-vectors.txt";
         try {
             var lines = Resources.readLines(Resources.getResource(resource), UTF_8);
             G1_VECTORS = lines.stream().filter(line -> !line.isBlank()).map(TestVector::parse).toList();
