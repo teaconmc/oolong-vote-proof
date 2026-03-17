@@ -13,6 +13,7 @@ repositories {
 
 dependencies {
     implementation("com.google.guava:guava:33.5.0-jre")
+    implementation("io.netty:netty-buffer:4.2.7.Final")
     testImplementation("org.junit.jupiter:junit-jupiter:5.14.3")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.14.3")
 }

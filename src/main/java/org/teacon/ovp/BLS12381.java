@@ -1,9 +1,13 @@
 package org.teacon.ovp;
 
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufUtil;
+import io.netty.buffer.Unpooled;
 import org.teacon.ovp.miracl.core.BLS12381.*;
 import org.teacon.ovp.miracl.core.HMAC;
 
 import java.nio.charset.StandardCharsets;
+import java.security.SecureRandom;
 
 public final class BLS12381 {
     private static final BIG ZERO;
@@ -19,12 +23,49 @@ public final class BLS12381 {
         GENERATOR_NEGATED.neg();
     }
 
-    public static BIG secretKeyToField(byte[] secretKey) {
-        if (secretKey.length != CURVE_ORDER_BYTES) {
-            throw new IllegalArgumentException("invalid secret key");
+    public static ByteBuf packToBytes(int sizeHint, Object... inputs) {
+        var output = Unpooled.buffer(sizeHint);
+        for (var i = 0; i < inputs.length; ++i) {
+            var input = inputs[i];
+            switch (input) {
+                case ECP e -> pointToSignature(e, output);
+                case FP12 f -> pairingToIndex(f, output);
+                case String s -> {
+                    var len = ByteBufUtil.utf8Bytes(s);
+                    if (len < 0x80) {
+                        output.writeByte(len);
+                    } else if (len < 0x4000) {
+                        output.writeByte(0x80 | (len & 0x7F));
+                        output.writeByte(len >>> 7);
+                    } else if (len < 0x200000) {
+                        output.writeByte(0x80 | (len & 0x7F));
+                        output.writeByte(0x80 | ((len >>> 7) & 0x7F));
+                        output.writeByte(len >>> 14);
+                    } else {
+                        throw new IllegalArgumentException("inputs[" + i + "] too long: " + len + " bytes");
+                    }
+                    output.writeCharSequence(s, StandardCharsets.UTF_8);
+                }
+                default -> throw new IllegalArgumentException("inputs[" + i + "] invalid");
+            }
         }
+        return output.asReadOnly();
+    }
+
+    public static BIG randomToField(SecureRandom random) {
+        var field = new BIG(0);
+        while (BIG.comp(field, ZERO) <= 0) {
+            var bytes = new byte[BIG.DNLEN * Long.BYTES];
+            random.nextBytes(bytes);
+            var dbig = DBIG.fromBytes(bytes);
+            field = dbig.mod(CURVE_ORDER);
+        }
+        return field;
+    }
+
+    public static BIG secretKeyToField(ByteBuf secretKey) {
         var bytes = new byte[CONFIG_BIG.MODBYTES];
-        System.arraycopy(secretKey, 0, bytes, CURVE_ORDER_ZEROS, CURVE_ORDER_BYTES);
+        secretKey.readBytes(bytes, CURVE_ORDER_ZEROS, CURVE_ORDER_BYTES);
         var field = BIG.fromBytes(bytes);
         if (BIG.comp(field, ZERO) <= 0 || BIG.comp(field, CURVE_ORDER) >= 0) {
             throw new IllegalArgumentException("invalid secret key");
@@ -32,9 +73,26 @@ public final class BLS12381 {
         return field;
     }
 
-    public static ECP hashToPoint(byte[] message) {
+    public static void fieldToSecretKey(BIG field, ByteBuf secretKey) {
+        if (BIG.comp(field, ZERO) <= 0 || BIG.comp(field, CURVE_ORDER) >= 0) {
+            throw new IllegalArgumentException("invalid secret key");
+        }
+        var bytes = new byte[CONFIG_BIG.MODBYTES];
+        field.toBytes(bytes);
+        secretKey.writeBytes(bytes, CURVE_ORDER_ZEROS, CURVE_ORDER_BYTES);
+    }
+
+    public static BIG hashToField(ByteBuf message, int readLength) {
         var dst = "BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_".getBytes(StandardCharsets.US_ASCII);
-        var u = BLS.hash_to_field(HMAC.MC_SHA2, CONFIG_CURVE.HASH_TYPE, dst, message, 2);
+        var bytes = ByteBufUtil.getBytes(message.readSlice(readLength));
+        var u = BLS.hash_to_field(HMAC.MC_SHA2, CONFIG_CURVE.HASH_TYPE, dst, bytes, 1);
+        return u[0].redc();
+    }
+
+    public static ECP hashToPoint(ByteBuf message, int readLength) {
+        var dst = "BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_".getBytes(StandardCharsets.US_ASCII);
+        var bytes = ByteBufUtil.getBytes(message.readSlice(readLength));
+        var u = BLS.hash_to_field(HMAC.MC_SHA2, CONFIG_CURVE.HASH_TYPE, dst, bytes, 2);
         var p = ECP.map2point(u[0]);
         p.add(ECP.map2point(u[1]));
         p.cfp();
@@ -46,35 +104,41 @@ public final class BLS12381 {
         return PAIR.fexp(PAIR.ate(pubKey, signature));
     }
 
-    public static FP12 pairing(ECP signature1, ECP2 pubKey1, ECP signature2, ECP2 pubKey2) {
-        return PAIR.fexp(PAIR.ate2(pubKey1, signature1, pubKey2, signature2));
+    public static FP12 pairingWithGeneratorNegative(ECP signature1, ECP2 pubKey1, ECP signature2) {
+        return PAIR.fexp(PAIR.ate2(pubKey1, signature1, GENERATOR_NEGATED, signature2));
     }
 
-    public static byte[] pointToPubKey(ECP2 pubKey) {
-        var bytes = new byte[CONFIG_BIG.MODBYTES * 2];
-        if (pubKey.is_infinity()) {
-            bytes[0] |= (byte) 0xC0;
-            return bytes;
+    public static void pairingToIndex(FP12 pairing, ByteBuf index) {
+        var bytes = new byte[CONFIG_BIG.MODBYTES * 12];
+        pairing.toBytes(bytes);
+        index.writeBytes(bytes);
+    }
+
+    public static void pointToPubKey(ECP2 point, ByteBuf pubKey) {
+        if (point.is_infinity()) {
+            pubKey.writeByte(0xC0).writeZero(CONFIG_BIG.MODBYTES * 2 - 1);
+            return;
         }
-        pubKey = new ECP2(pubKey);
-        pubKey.affine();
-        var x = pubKey.getx();
+        var bytes = new byte[CONFIG_BIG.MODBYTES * 2];
+        point = new ECP2(point);
+        point.affine();
+        var x = point.getx();
         x.reduce();
         x.toBytes(bytes);
-        var y = pubKey.gety();
+        var y = point.gety();
         if (y.islarger() == 1) {
             bytes[0] |= (byte) 0x20;
         }
         bytes[0] |= (byte) 0x80;
-        return bytes;
+        pubKey.writeBytes(bytes);
     }
 
-    public static byte[] pointToSignature(ECP point) {
-        var bytes = new byte[CONFIG_BIG.MODBYTES];
+    public static void pointToSignature(ECP point, ByteBuf signature) {
         if (point.is_infinity()) {
-            bytes[0] |= (byte) 0xC0;
-            return bytes;
+            signature.writeByte(0xC0).writeZero(CONFIG_BIG.MODBYTES - 1);
+            return;
         }
+        var bytes = new byte[CONFIG_BIG.MODBYTES];
         point = new ECP(point);
         point.affine();
         var x = point.getx();
@@ -84,14 +148,12 @@ public final class BLS12381 {
             bytes[0] |= (byte) 0x20;
         }
         bytes[0] |= (byte) 0x80;
-        return bytes;
+        signature.writeBytes(bytes);
     }
 
-    public static ECP2 pubKeyToPoint(byte[] pubKey) {
-        if (pubKey.length != CONFIG_BIG.MODBYTES * 2) {
-            throw new IllegalArgumentException("invalid pubkey");
-        }
-        var head = pubKey[0];
+    public static ECP2 pubKeyToPoint(ByteBuf pubKey) {
+        var bytes = ByteBufUtil.getBytes(pubKey.readSlice(CONFIG_BIG.MODBYTES * 2));
+        var head = bytes[0];
         var compressed = head & 0x80;
         if (compressed != 0x80) {
             throw new IllegalArgumentException("invalid pubkey");
@@ -100,7 +162,7 @@ public final class BLS12381 {
         if (infinity == 0x40) {
             var blank = head & 0x3F;
             for (var i = 1; i < CONFIG_BIG.MODBYTES * 2; ++i) {
-                blank |= pubKey[i] & 0xFF;
+                blank |= bytes[i] & 0xFF;
             }
             if (blank != 0) {
                 throw new IllegalArgumentException("invalid pubkey");
@@ -108,9 +170,9 @@ public final class BLS12381 {
             return new ECP2();
         }
         var sign = head & 0x20;
-        pubKey[0] &= 0x1F;
-        var x = FP2.fromBytes(pubKey);
-        pubKey[0] = head;
+        bytes[0] &= 0x1F;
+        var x = FP2.fromBytes(bytes);
+        bytes[0] = head;
         var point = new ECP2(x, 0);
         if ((point.gety().islarger() == 1) != (sign == 0x20)) {
             point.neg();
@@ -118,11 +180,9 @@ public final class BLS12381 {
         return point;
     }
 
-    public static ECP signatureToPoint(byte[] signature) {
-        if (signature.length != CONFIG_BIG.MODBYTES) {
-            throw new IllegalArgumentException("invalid signature");
-        }
-        var head = signature[0];
+    public static ECP signatureToPoint(ByteBuf signature) {
+        var bytes = ByteBufUtil.getBytes(signature.readSlice(CONFIG_BIG.MODBYTES));
+        var head = bytes[0];
         var compressed = head & 0x80;
         if (compressed != 0x80) {
             throw new IllegalArgumentException("invalid signature");
@@ -131,7 +191,7 @@ public final class BLS12381 {
         if (infinity == 0x40) {
             var blank = head & 0x3F;
             for (var i = 1; i < CONFIG_BIG.MODBYTES; ++i) {
-                blank |= signature[i] & 0xFF;
+                blank |= bytes[i] & 0xFF;
             }
             if (blank != 0) {
                 throw new IllegalArgumentException("invalid signature");
@@ -139,9 +199,9 @@ public final class BLS12381 {
             return new ECP();
         }
         var sign = head & 0x20;
-        signature[0] &= 0x1F;
-        var x = BIG.fromBytes(signature);
-        signature[0] = head;
+        bytes[0] &= 0x1F;
+        var x = BIG.fromBytes(bytes);
+        bytes[0] = head;
         var point = new ECP(x, 0);
         if ((point.gety().islarger() == 1) != (sign == 0x20)) {
             point.neg();
@@ -163,13 +223,13 @@ public final class BLS12381 {
         return signature;
     }
 
-    public static byte[] skToPk(BIG secretKey) {
+    public static void skToPk(BIG secretKey, ByteBuf pubKey) {
         var point = ECP2.generator();
         point = point.mul(secretKey);
-        return pointToPubKey(point);
+        pointToPubKey(point, pubKey);
     }
 
-    public static ECP2 keyValidate(byte[] pubKey) {
+    public static ECP2 keyValidate(ByteBuf pubKey) {
         var point = pubKeyToPoint(pubKey);
         if (ECP2.generator().equals(point)) {
             throw new IllegalArgumentException("invalid pubkey");
@@ -177,17 +237,17 @@ public final class BLS12381 {
         return pubKeySubgroupCheck(point);
     }
 
-    public static byte[] coreSign(BIG secretKey, byte[] input) {
-        var point = hashToPoint(input);
+    public static void coreSign(BIG secretKey, ByteBuf message, int readLength, ByteBuf signature) {
+        var point = hashToPoint(message, readLength);
         point = point.mul(secretKey);
-        return pointToSignature(point);
+        pointToSignature(point, signature);
     }
 
-    public static boolean coreVerify(byte[] pubKey, byte[] message, byte[] signature) {
+    public static boolean coreVerify(ByteBuf pubKey, ByteBuf message, int readLength, ByteBuf signature) {
         try {
             var signPoint = signatureSubgroupCheck(signatureToPoint(signature));
             var keyPoint = keyValidate(pubKey);
-            var pair = pairing(hashToPoint(message), keyPoint, signPoint, GENERATOR_NEGATED);
+            var pair = pairingWithGeneratorNegative(hashToPoint(message, readLength), keyPoint, signPoint);
             return pair.isunity();
         } catch (RuntimeException e) {
             return false;

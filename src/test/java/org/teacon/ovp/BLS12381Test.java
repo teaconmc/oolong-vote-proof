@@ -2,6 +2,9 @@ package org.teacon.ovp;
 
 import com.google.common.io.BaseEncoding;
 import com.google.common.io.Resources;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufUtil;
+import io.netty.buffer.Unpooled;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -26,15 +29,21 @@ class BLS12381Test {
 
     @Test
     void coreSignAndVerifyG1Vectors() {
+        var signature = Unpooled.buffer();
+        var pubKey = Unpooled.buffer();
         for (var vector : G1_VECTORS) {
             var secret = BLS12381.secretKeyToField(vector.privateKey);
-            var signature = BLS12381.coreSign(secret, vector.message);
-            assertEquals(vector.expectedSignatureHex, TestVector.HEX.encode(signature));
-            assertTrue(BLS12381.coreVerify(BLS12381.skToPk(secret), vector.message, signature));
+            signature.readerIndex(0).writerIndex(0);
+            BLS12381.coreSign(secret, vector.message, vector.message.readableBytes(), signature);
+            assertEquals(vector.expectedSignatureHex, TestVector.HEX.encode(ByteBufUtil.getBytes(signature)));
+            pubKey.readerIndex(0).writerIndex(0);
+            BLS12381.skToPk(secret, pubKey);
+            vector.message.readerIndex(0);
+            assertTrue(BLS12381.coreVerify(pubKey, vector.message, vector.message.readableBytes(), signature));
         }
     }
 
-    private record TestVector(byte[] privateKey, byte[] message, String expectedSignatureHex) {
+    private record TestVector(ByteBuf privateKey, ByteBuf message, String expectedSignatureHex) {
         private static final BaseEncoding HEX = BaseEncoding.base16().lowerCase();
 
         private static TestVector parse(String line) {
@@ -42,7 +51,9 @@ class BLS12381Test {
             if (parts.length != 3) {
                 throw new IllegalArgumentException("Unexpected vector format: " + line);
             }
-            return new TestVector(HEX.decode(parts[0]), HEX.decode(parts[1]), parts[2]);
+            var privateKey = Unpooled.wrappedBuffer(HEX.decode(parts[0])).asReadOnly();
+            var message = Unpooled.wrappedBuffer(HEX.decode(parts[1])).asReadOnly();
+            return new TestVector(privateKey, message, parts[2]);
         }
     }
 }
