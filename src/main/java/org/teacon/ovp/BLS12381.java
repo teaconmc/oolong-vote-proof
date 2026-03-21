@@ -1,16 +1,18 @@
 package org.teacon.ovp;
 
+import com.google.common.hash.Hashing;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
 import org.teacon.ovp.miracl.core.BLS12381.*;
-import org.teacon.ovp.miracl.core.HMAC;
 
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
+import java.util.Arrays;
 
 public final class BLS12381 {
     private static final BIG ZERO;
+    private static final BIG MODULUS;
     private static final BIG CURVE_ORDER;
     private static final ECP2 GENERATOR_NEGATED;
     private static final int CURVE_ORDER_BYTES = 32;
@@ -18,6 +20,7 @@ public final class BLS12381 {
 
     static {
         ZERO = new BIG(0);
+        MODULUS = new BIG(ROM.Modulus);
         CURVE_ORDER = new BIG(ROM.CURVE_Order);
         GENERATOR_NEGATED = ECP2.generator();
         GENERATOR_NEGATED.neg();
@@ -82,19 +85,58 @@ public final class BLS12381 {
         secretKey.writeBytes(bytes, CURVE_ORDER_ZEROS, CURVE_ORDER_BYTES);
     }
 
-    public static BIG hashToField(ByteBuf message, int readLength) {
-        var dst = "BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_".getBytes(StandardCharsets.US_ASCII);
-        var bytes = ByteBufUtil.getBytes(message.readSlice(readLength));
-        var u = BLS.hash_to_field(HMAC.MC_SHA2, CONFIG_CURVE.HASH_TYPE, dst, bytes, 1);
-        return u[0].redc();
+    private static byte[] paddedXmdExpand(ByteBuf message, int readLength, int outputMinLength, byte[] dst) {
+        if (dst.length >= 256) {
+            throw new IllegalArgumentException("xmd expand too long: " + dst.length + " >= 256");
+        }
+        // allocating
+        var ell = (outputMinLength - 1) / 32 + 1;
+        var okm = new byte[ell * 32];
+        // hashing phase 1
+        var h0 = new byte[32];
+        // noinspection UnstableApiUsage
+        var hasher = Hashing.sha256().newHasher();
+        // noinspection UnstableApiUsage
+        hasher.putBytes(new byte[64]).putBytes(message.readSlice(readLength).nioBuffer());
+        // noinspection UnstableApiUsage
+        hasher.putByte((byte) (outputMinLength / 256)).putByte((byte) (outputMinLength % 256)).putByte((byte) 0);
+        // noinspection UnstableApiUsage
+        hasher.putBytes(dst).putByte((byte) dst.length);
+        // noinspection UnstableApiUsage
+        hasher.hash().writeBytesTo(h0, 0, 32);
+        // hashing phase 2
+        var h1 = new byte[32];
+        for (var i = 0; i < ell; ++i) {
+            for (var j = 0; j < 32; ++j) {
+                h1[j] ^= h0[j];
+            }
+            // noinspection UnstableApiUsage
+            hasher = Hashing.sha256().newHasher();
+            // noinspection UnstableApiUsage
+            hasher.putBytes(h1).putByte((byte) (i + 1)).putBytes(dst).putByte((byte) dst.length);
+            // noinspection UnstableApiUsage
+            hasher.hash().writeBytesTo(h1,0, 32);
+            System.arraycopy(h1, 0, okm, i * 32, 32);
+        }
+        // result padded to n * 32 bytes
+        return okm;
+    }
+
+    public static BIG hashToScalar(ByteBuf message, int readLength) {
+        var dst = "HashToScalar-".getBytes(StandardCharsets.US_ASCII);
+        var okm = paddedXmdExpand(message, readLength, 48, dst);
+        var u = new FP(DBIG.fromBytes(Arrays.copyOf(okm, 48)).mod(CURVE_ORDER));
+        return u.redc();
     }
 
     public static ECP hashToPoint(ByteBuf message, int readLength) {
         var dst = "BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_".getBytes(StandardCharsets.US_ASCII);
-        var bytes = ByteBufUtil.getBytes(message.readSlice(readLength));
-        var u = BLS.hash_to_field(HMAC.MC_SHA2, CONFIG_CURVE.HASH_TYPE, dst, bytes, 2);
-        var p = ECP.map2point(u[0]);
-        p.add(ECP.map2point(u[1]));
+        var okm = paddedXmdExpand(message, readLength, 2 * 64, dst);
+        var fd = new byte[64];
+        System.arraycopy(okm, 0, fd, 0, 64);
+        var p = ECP.map2point(new FP(DBIG.fromBytes(fd).mod(MODULUS)));
+        System.arraycopy(okm, 64, fd, 0, 64);
+        p.add(ECP.map2point(new FP(DBIG.fromBytes(fd).mod(MODULUS))));
         p.cfp();
         p.affine();
         return p;
