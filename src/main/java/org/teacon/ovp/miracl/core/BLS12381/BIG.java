@@ -20,7 +20,6 @@
 /* CORE BIG number class */
 
 package org.teacon.ovp.miracl.core.BLS12381;
-import org.teacon.ovp.miracl.core.RAND;
 
 public class BIG {
 
@@ -708,47 +707,6 @@ public class BIG {
         int msk = (1 << n) - 1;
         norm();
         return ((int)w[0]) & msk;
-    }
-
-    /* get 8*CONFIG_BIG.MODBYTES size random number */
-    public static BIG random(RAND rng) {
-        BIG m = new BIG(0);
-        int i, b, j = 0, r = 0;
-
-        /* generate random BIG */
-        for (i = 0; i < 8 * CONFIG_BIG.MODBYTES; i++) {
-            if (j == 0) r = rng.getByte();
-            else r >>= 1;
-
-            b = r & 1;
-            m.shl(1); m.w[0] += b; // m.inc(b);
-            j++; j &= 7;
-        }
-        return m;
-    }
-
-    /* Create random BIG in portable way, one bit at a time */
-    public static BIG randomnum(BIG q, RAND rng) {
-        DBIG d = new DBIG(0);
-        int i, b, j = 0, r = 0;
-        for (i = 0; i < 2 * q.nbits(); i++) {
-            if (j == 0) r = rng.getByte();
-            else r >>= 1;
-
-            b = r & 1;
-            d.shl(1); d.w[0] += b; // m.inc(b);
-            j++; j &= 7;
-        }
-        BIG m = d.mod(q);
-        return m;
-    }
-
-    /* create randum BIG less than r and less than trunc bits */
-    public static BIG randtrunc(BIG q, int trunc, RAND rng) {
-        BIG m = BIG.randomnum(q, rng);
-        if (q.nbits() > trunc)
-            m.mod2m(trunc);
-        return m;
     }
 
     /* return a*b mod m */

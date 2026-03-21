@@ -22,7 +22,6 @@
 /* FP2 elements are of the form a+ib, where i is sqrt(-1) */
 
 package org.teacon.ovp.miracl.core.BLS12381;
-import org.teacon.ovp.miracl.core.RAND;
 
 public final class FP2 {
 	private final FP a;
@@ -141,12 +140,6 @@ public final class FP2 {
 		a=new FP(c);
 		b=new FP();
 	}
-
-    public FP2(RAND rng)
-    {
-        a=new FP(rng);
-        b=new FP(rng);
-    }
 
 /* extract a */
 	public BIG getA()

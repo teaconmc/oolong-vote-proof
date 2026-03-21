@@ -22,7 +22,6 @@
 /* FP4 elements are of the form a+ib, where i is sqrt(-1+sqrt(-1))  */
 
 package org.teacon.ovp.miracl.core.BLS12381;
-import org.teacon.ovp.miracl.core.RAND;
 
 public final class FP4 {
 	private final FP2 a;
@@ -153,12 +152,6 @@ public final class FP4 {
 		a=new FP2(c);
 		b=new FP2();
 	}
-
-    public FP4(RAND rng)
-    {
-        a=new FP2(rng);
-        b=new FP2(rng);
-    }
 
 /* copy this=x */
 	public void copy(FP4 x)

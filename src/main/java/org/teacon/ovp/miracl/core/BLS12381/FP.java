@@ -20,7 +20,6 @@
 /* CORE mod p functions */
 
 package org.teacon.ovp.miracl.core.BLS12381;
-import org.teacon.ovp.miracl.core.RAND;
 
 public final class FP {
 
@@ -172,13 +171,6 @@ public final class FP {
     public FP(FP a) {
         x = new BIG(a.x);
         XES = a.XES;
-    }
-
-    public FP(RAND rng)
-    {
-        BIG m = new BIG(ROM.Modulus);
-        x = BIG.randomnum(m, rng);
-        nres();
     }
 
     /* convert to string */

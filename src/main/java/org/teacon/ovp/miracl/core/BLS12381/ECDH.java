@@ -21,10 +21,6 @@
 
 package org.teacon.ovp.miracl.core.BLS12381;
 
-import org.teacon.ovp.miracl.core.RAND;
-import org.teacon.ovp.miracl.core.HMAC;
-import org.teacon.ovp.miracl.core.AES;
-
 public final class ECDH {
     public static final int INVALID_PUBLIC_KEY = -2;
     public static final int ERROR = -3;
@@ -59,38 +55,6 @@ public final class ECDH {
         if (s.iszilch()) return false;
         if (BIG.comp(s,r)>=0) return false;
         return true;
-    }
-
-    /* Calculate a public/private EC GF(p) key pair W,S where W=S.G mod EC(p),
-     * where S is the secret key and W is the public key
-     * and G is fixed generator.
-     * If RNG is NULL then the private key is provided externally in S
-     * otherwise it is generated randomly internally */
-    public static int KEY_PAIR_GENERATE(RAND RNG, byte[] S, byte[] W) {
-        BIG r, s;
-        ECP G, WP;
-        int res = 0;
-
-        G = ECP.generator();
-        r = new BIG(ROM.CURVE_Order);
-
-        if (RNG == null) {
-            s = BIG.fromBytes(S);
-        } else {
-            if (CONFIG_CURVE.CURVETYPE!=CONFIG_CURVE.WEIERSTRASS)
-                s = BIG.random(RNG);            // from random bytes
-            else
-                s = BIG.randomnum(r, RNG);      // Removes biases
-        }
-
-        if (CONFIG_CURVE.CURVETYPE!=CONFIG_CURVE.WEIERSTRASS)
-            RFC7748(s);             // For Montgomery or Edwards, apply RFC7748 transformation
-
-        s.toBytes(S);
-        WP = G.clmul(s,r);
-        WP.toBytes(W, false);       // To use point compression on public keys, change to true
-
-        return res;
     }
 
     /* validate public key. */
@@ -158,127 +122,6 @@ public final class ECDH {
         return res;
     }
 
-    /* IEEE ECDSA Signature, C and D are signature on F using private key S */
-    public static int SP_DSA(int sha, RAND RNG, byte[] S, byte[] F, byte[] C, byte[] D) {
-        byte[] T = new byte[EGS];
-        BIG r, s, f, c, d, u, vx, w;
-        ECP G, V;
-
-        byte[] B = HMAC.GPhashit(HMAC.MC_SHA2, sha, EGS, 0,F, -1, null );
-
-        G = ECP.generator();
-        r = new BIG(ROM.CURVE_Order);
-
-        s = BIG.fromBytes(S);
-        f = BIG.fromBytes(B);
-
-        c = new BIG(0);
-        d = new BIG(0);
-        V = new ECP();
-
-        do {
-            u = BIG.randomnum(r, RNG);
-            w = BIG.randomnum(r, RNG); /* IMPORTANT - side channel masking to protect invmodp() */
-
-            V.copy(G);
-            V = V.clmul(u,r);
-            vx = V.getX();
-            c.copy(vx);
-            c.mod(r);
-            if (c.iszilch()) continue;
-
-            u.copy(BIG.modmul(u, w, r));
-
-            u.invmodp(r);
-            d.copy(BIG.modmul(s, c, r));
-            d.copy(BIG.modadd(d, f, r));
-
-            d.copy(BIG.modmul(d, w, r));
-            d.copy(BIG.modmul(u, d, r));
-        } while (d.iszilch());
-
-        c.toBytes(T);
-        for (int i = 0; i < EGS; i++) C[i] = T[i];
-        d.toBytes(T);
-        for (int i = 0; i < EGS; i++) D[i] = T[i];
-        return 0;
-    }
-
-    /* IEEE1363 ECDSA Signature Verification. Signature C and D on F is verified using public key W */
-    public static int VP_DSA(int sha, byte[] W, byte[] F, byte[] C, byte[] D) {
-        BIG r, f, c, d, h2;
-        int res = 0;
-        ECP G, WP, P;
-        int valid;
-
-        byte[] B = HMAC.GPhashit(HMAC.MC_SHA2, sha, EGS, 0, F, -1, null);
-
-        G = ECP.generator();
-        r = new BIG(ROM.CURVE_Order);
-
-        c = BIG.fromBytes(C);
-        d = BIG.fromBytes(D);
-        f = BIG.fromBytes(B);
-
-        if (c.iszilch() || BIG.comp(c, r) >= 0 || d.iszilch() || BIG.comp(d, r) >= 0)
-            res = ERROR;
-
-        if (res == 0) {
-            d.invmodp(r);
-            f.copy(BIG.modmul(f, d, r));
-            h2 = BIG.modmul(c, d, r);
-
-            WP = ECP.fromBytes(W);
-            if (WP.is_infinity()) res = ERROR;
-            else {
-                P = new ECP();
-                P.copy(WP);
-                P = P.mul2(h2, G, f);
-                if (P.is_infinity()) res = ERROR;
-                else {
-                    d = P.getX();
-                    d.mod(r);
-                    if (BIG.comp(d, c) != 0) res = ERROR;
-                }
-            }
-        }
-        return res;
-    }
-
-    /* IEEE1363 ECIES encryption. Encryption of plaintext M uses public key W and produces ciphertext V,C,T */
-    public static byte[] ECIES_ENCRYPT(int sha, byte[] P1, byte[] P2, RAND RNG, byte[] W, byte[] M, byte[] V, byte[] T) {
-        int i, len;
-
-        byte[] Z = new byte[EFS];
-        byte[] VZ = new byte[3 * EFS + 1];
-        byte[] K1 = new byte[CONFIG_CURVE.AESKEY];
-        byte[] K2 = new byte[CONFIG_CURVE.AESKEY];
-        byte[] U = new byte[EGS];
-
-        if (KEY_PAIR_GENERATE(RNG, U, V) != 0) return new byte[0];
-        if (SVDP_DH(U, W, Z, 0) != 0) return new byte[0];
-
-        for (i = 0; i < 2 * EFS + 1; i++) VZ[i] = V[i];
-        for (i = 0; i < EFS; i++) VZ[2 * EFS + 1 + i] = Z[i];
-
-
-        byte[] K = HMAC.KDF2(HMAC.MC_SHA2,sha, VZ, P1, 2 * CONFIG_CURVE.AESKEY);
-
-        for (i = 0; i < CONFIG_CURVE.AESKEY; i++) {K1[i] = K[i]; K2[i] = K[CONFIG_CURVE.AESKEY + i];}
-
-        byte[] C = AES.CBC_IV0_ENCRYPT(K1, M);
-        byte[] L2 = HMAC.inttoBytes(P2.length, 8);
-
-        byte[] AC = new byte[C.length + P2.length + 8];
-        for (i = 0; i < C.length; i++) AC[i] = C[i];
-        for (i = 0; i < P2.length; i++) AC[C.length + i] = P2[i];
-        for (i = 0; i < 8; i++) AC[C.length + P2.length + i] = L2[i];
-
-        HMAC.HMAC1(HMAC.MC_SHA2, sha, T, T.length, K2, AC);
-
-        return C;
-    }
-
     /* constant time n-byte compare */
     static boolean ncomp(byte[] T1, byte[] T2, int n) {
         int res = 0;
@@ -287,42 +130,5 @@ public final class ECDH {
         }
         if (res == 0) return true;
         return false;
-    }
-
-    /* IEEE1363 ECIES decryption. Decryption of ciphertext V,C,T using private key U outputs plaintext M */
-    public static byte[] ECIES_DECRYPT(int sha, byte[] P1, byte[] P2, byte[] V, byte[] C, byte[] T, byte[] U) {
-
-        int i, len;
-
-        byte[] Z = new byte[EFS];
-        byte[] VZ = new byte[3 * EFS + 1];
-        byte[] K1 = new byte[CONFIG_CURVE.AESKEY];
-        byte[] K2 = new byte[CONFIG_CURVE.AESKEY];
-        byte[] TAG = new byte[T.length];
-
-        if (SVDP_DH(U, V, Z, 0) != 0) return new byte[0];
-
-        for (i = 0; i < 2 * EFS + 1; i++) VZ[i] = V[i];
-        for (i = 0; i < EFS; i++) VZ[2 * EFS + 1 + i] = Z[i];
-
-        byte[] K = HMAC.KDF2(HMAC.MC_SHA2,sha, VZ, P1, 2 * CONFIG_CURVE.AESKEY);
-
-        for (i = 0; i < CONFIG_CURVE.AESKEY; i++) {K1[i] = K[i]; K2[i] = K[CONFIG_CURVE.AESKEY + i];}
-
-        byte[] M = AES.CBC_IV0_DECRYPT(K1, C);
-
-        if (M.length == 0) return M;
-
-        byte[] L2 = HMAC.inttoBytes(P2.length, 8);
-
-        byte[] AC = new byte[C.length + P2.length + 8];
-
-        for (i = 0; i < C.length; i++) AC[i] = C[i];
-        for (i = 0; i < P2.length; i++) AC[C.length + i] = P2[i];
-        for (i = 0; i < 8; i++) AC[C.length + P2.length + i] = L2[i];
-
-        HMAC.HMAC1(HMAC.MC_SHA2, sha, TAG, TAG.length, K2, AC);
-        if (!ncomp(T, TAG, T.length)) return new byte[0];
-        return M;
     }
 }
