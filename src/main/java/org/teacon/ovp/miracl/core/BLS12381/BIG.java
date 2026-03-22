@@ -164,10 +164,9 @@ public class BIG {
 
     /* set this[i]+=x*y+c, and return high part */
 
-    public static long[] muladd(long a, long b, long c, long r) {
+    public static void muladd(long a, long b, long c, long r, long[] tb) {
 // need JDK 9+
 
-        long[] tb = new long[2];
         long tp=Math.multiplyHigh(a,b);  // useful intrinsic
         long bt=a*b;
         long bot=bt&BMASK;
@@ -178,12 +177,10 @@ public class BIG {
         top+=carry;
         tb[0] = top;
         tb[1] = bot;
-        return tb;
 
 // alternate method
 /*
         long x0, x1, y0, y1;
-        long[] tb = new long[2];
         x0 = a & HMASK;
         x1 = (a >> HBITS);
         y0 = b & HMASK;
@@ -200,7 +197,6 @@ public class BIG {
         top += carry;
         tb[0] = top;
         tb[1] = bot;
-        return tb; 
 */
     }
 
@@ -213,7 +209,7 @@ public class BIG {
             ak = w[i];
             w[i] = 0;
 
-            cr = muladd(ak, (long)c, carry, w[i]);
+            muladd(ak, (long)c, carry, w[i], cr);
             carry = cr[0];
             w[i] = cr[1];
 
@@ -227,7 +223,7 @@ public class BIG {
         long[] cr = new long[2];
         long carry = 0;
         for (int j = 0; j < NLEN; j++) {
-            cr = muladd(w[j], (long)c, carry, m.w[j]);
+            muladd(w[j], (long)c, carry, m.w[j], cr);
             carry = cr[0];
             m.w[j] = cr[1];
         }
@@ -257,7 +253,7 @@ public class BIG {
             carry = 0;
             for (int j = 0; j < NLEN; j++)
                 if (i + j < NLEN) {
-                    cr = muladd(a.w[i], b.w[j], carry, c.w[i + j]);
+                    muladd(a.w[i], b.w[j], carry, c.w[i + j], cr);
                     carry = cr[0];
                     c.w[i + j] = cr[1];
                 }
@@ -275,7 +271,7 @@ public class BIG {
         for (int i = 0; i < NLEN; i++) {
             carry = 0;
             for (int j = 0; j < NLEN; j++) {
-                cr = muladd(a.w[i], b.w[j], carry, c.w[i + j]);
+                muladd(a.w[i], b.w[j], carry, c.w[i + j], cr);
                 carry = cr[0];
                 c.w[i + j] = cr[1];
             }
@@ -295,7 +291,7 @@ public class BIG {
         for (int i = 0; i < NLEN; i++) {
             carry = 0;
             for (int j = i + 1; j < NLEN; j++) {
-                cr = muladd(2 * a.w[i], a.w[j], carry, c.w[i + j]);
+                muladd(2 * a.w[i], a.w[j], carry, c.w[i + j], cr);
                 carry = cr[0];
                 c.w[i + j] = cr[1];
             }
@@ -303,7 +299,7 @@ public class BIG {
         }
 
         for (int i = 0; i < NLEN; i++) {
-            cr = muladd(a.w[i], a.w[i], 0, c.w[2 * i]);
+            muladd(a.w[i], a.w[i], 0, c.w[2 * i], cr);
             c.w[2 * i + 1] += cr[0];
             c.w[2 * i] = cr[1];
         }
@@ -324,7 +320,7 @@ public class BIG {
 
             carry = 0;
             for (int j = 0; j < NLEN; j++) {
-                cr = muladd(m, md.w[j], carry, d.w[i + j]);
+                muladd(m, md.w[j], carry, d.w[i + j], cr);
                 carry = cr[0];
                 d.w[i + j] = cr[1];
             }

@@ -56,7 +56,7 @@ public final class FP {
             BIG b;
             long[] cr = new long[2];
             for (int i = 0; i < BIG.NLEN; i++) {
-                cr = BIG.muladd(d.w[i], ROM.MConst - 1, d.w[i], d.w[BIG.NLEN + i - 1]);
+                BIG.muladd(d.w[i], ROM.MConst - 1, d.w[i], d.w[BIG.NLEN + i - 1], cr);
                 d.w[BIG.NLEN + i] += cr[0];
                 d.w[BIG.NLEN + i - 1] = cr[1];
             }
