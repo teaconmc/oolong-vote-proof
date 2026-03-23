@@ -1,4 +1,4 @@
-package org.teacon.ovp;
+package org.teacon.ovp.util;
 
 import com.google.common.hash.Hashing;
 import io.netty.buffer.ByteBuf;
@@ -8,7 +8,7 @@ import org.teacon.ovp.miracl.core.BLS12381.*;
 
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
-import java.util.Arrays;
+import java.util.random.RandomGenerator;
 
 public final class BLS12381 {
     private static final BIG ZERO;
@@ -26,50 +26,80 @@ public final class BLS12381 {
         GENERATOR_NEGATED.neg();
     }
 
-    public static ByteBuf packToBytes(int sizeHint, Object... inputs) {
-        var output = Unpooled.buffer(sizeHint);
-        for (var i = 0; i < inputs.length; ++i) {
-            var input = inputs[i];
-            switch (input) {
-                case ECP e -> pointToSignature(e, output);
-                case FP12 f -> pairingToIndex(f, output);
-                case String s -> {
-                    var len = ByteBufUtil.utf8Bytes(s);
-                    if (len < 0x80) {
-                        output.writeByte(len);
-                    } else if (len < 0x4000) {
-                        output.writeByte(0x80 | (len & 0x7F));
-                        output.writeByte(len >>> 7);
-                    } else if (len < 0x200000) {
-                        output.writeByte(0x80 | (len & 0x7F));
-                        output.writeByte(0x80 | ((len >>> 7) & 0x7F));
-                        output.writeByte(len >>> 14);
-                    } else {
-                        throw new IllegalArgumentException("inputs[" + i + "] too long: " + len + " bytes");
-                    }
-                    output.writeCharSequence(s, StandardCharsets.UTF_8);
+    public static String bytesToString(boolean enableLonger, ByteBuf input) {
+        var length = input.readByte() & 0xFF;
+        if (length >= 0x80) {
+            length = (length & 0x7F) | (input.readByte() & 0xFF) << 7;
+            if (length <= 0x7F) {
+                throw new IllegalArgumentException("One byte length (" + length + ") with two bytes input");
+            }
+            if (length >= 0x4000) {
+                if (!enableLonger) {
+                    throw new IllegalArgumentException("String too long (max " + 0x3FFF + " bytes)");
                 }
-                default -> throw new IllegalArgumentException("inputs[" + i + "] invalid");
+                length = (length & 0x3FFF) | (input.readByte() & 0xFF) << 14;
+                if (length <= 0x3FFF) {
+                    throw new IllegalArgumentException("Two bytes length (" + length + ") with three bytes input");
+                }
+                if (length >= 0x200000) {
+                    throw new IllegalArgumentException("String too long (max " + 0x1FFFFF + " bytes)");
+                }
             }
         }
-        return output.asReadOnly();
+        return input.readString(length, StandardCharsets.UTF_8);
     }
 
-    public static BIG randomToField(SecureRandom random) {
+    public static void stringToBytes(boolean enableLonger, String input, ByteBuf output) {
+        var length = ByteBufUtil.utf8Bytes(input);
+        if (length < 0x80) {
+            output.writeByte(length);
+            output.writeCharSequence(input, StandardCharsets.UTF_8);
+            return;
+        }
+        if (length < 0x4000) {
+            output.writeByte(0x80 | length & 0x7F);
+            output.writeByte(length >>> 7);
+            output.writeCharSequence(input, StandardCharsets.UTF_8);
+            return;
+        }
+        if (!enableLonger) {
+            throw new IllegalArgumentException("String too long (max " + 0x3FFF + " bytes)");
+        }
+        if (length < 0x200000) {
+            output.writeByte(0x80 | (length & 0x7F));
+            output.writeByte(0x80 | ((length >>> 7) & 0x7F));
+            output.writeByte(length >>> 14);
+            output.writeCharSequence(input, StandardCharsets.UTF_8);
+            return;
+        }
+        throw new IllegalArgumentException("String too long (max " + 0x1FFFFF + " bytes)");
+    }
+
+    public static BIG randomToField(RandomGenerator rng) {
         var field = new BIG(0);
         while (BIG.comp(field, ZERO) <= 0) {
-            var bytes = new byte[BIG.DNLEN * Long.BYTES];
-            random.nextBytes(bytes);
+            var bytes = new byte[CONFIG_BIG.MODBYTES * 2];
+            rng.nextBytes(bytes);
             var dbig = DBIG.fromBytes(bytes);
             field = dbig.mod(CURVE_ORDER);
         }
         return field;
     }
 
-    public static BIG secretKeyToField(ByteBuf secretKey) {
+    public static BIG bytesToField(ByteBuf secretKey) {
         var bytes = new byte[CONFIG_BIG.MODBYTES];
         secretKey.readBytes(bytes, CURVE_ORDER_ZEROS, CURVE_ORDER_BYTES);
-        var field = BIG.fromBytes(bytes);
+        return BIG.fromBytes(bytes);
+    }
+
+    public static void fieldToBytes(BIG field, ByteBuf secretKey) {
+        var bytes = new byte[CONFIG_BIG.MODBYTES];
+        field.toBytes(bytes);
+        secretKey.writeBytes(bytes, CURVE_ORDER_ZEROS, CURVE_ORDER_BYTES);
+    }
+
+    public static BIG secretKeyToField(ByteBuf secretKey) {
+        var field = bytesToField(secretKey);
         if (BIG.comp(field, ZERO) <= 0 || BIG.comp(field, CURVE_ORDER) >= 0) {
             throw new IllegalArgumentException("invalid secret key");
         }
@@ -80,12 +110,18 @@ public final class BLS12381 {
         if (BIG.comp(field, ZERO) <= 0 || BIG.comp(field, CURVE_ORDER) >= 0) {
             throw new IllegalArgumentException("invalid secret key");
         }
-        var bytes = new byte[CONFIG_BIG.MODBYTES];
-        field.toBytes(bytes);
-        secretKey.writeBytes(bytes, CURVE_ORDER_ZEROS, CURVE_ORDER_BYTES);
+        fieldToBytes(field, secretKey);
     }
 
-    private static byte[] paddedXmdExpand(ByteBuf message, int readLength, int outputMinLength, byte[] dst) {
+    public static BIG fieldMultiplyAdd(BIG a, BIG b, BIG c) {
+        var result = BIG.modmul(a, b, CURVE_ORDER);
+        result.add(c);
+        result.norm();
+        result.mod(CURVE_ORDER);
+        return result;
+    }
+
+    public static ByteBuf xmdExpand(ByteBuf message, int readLength, int outputMinLength, byte[] dst) {
         if (dst.length >= 256) {
             throw new IllegalArgumentException("xmd expand too long: " + dst.length + " >= 256");
         }
@@ -94,10 +130,15 @@ public final class BLS12381 {
         var okm = new byte[ell * 32];
         // hashing phase 1
         var h0 = new byte[32];
+        var slices = message.readSlice(readLength).nioBuffers();
         // noinspection UnstableApiUsage
         var hasher = Hashing.sha256().newHasher();
         // noinspection UnstableApiUsage
-        hasher.putBytes(new byte[64]).putBytes(message.readSlice(readLength).nioBuffer());
+        hasher.putBytes(h0).putBytes(h0);
+        for (var slice: slices) {
+            // noinspection UnstableApiUsage
+            hasher.putBytes(slice);
+        }
         // noinspection UnstableApiUsage
         hasher.putByte((byte) (outputMinLength / 256)).putByte((byte) (outputMinLength % 256)).putByte((byte) 0);
         // noinspection UnstableApiUsage
@@ -119,24 +160,23 @@ public final class BLS12381 {
             System.arraycopy(h1, 0, okm, i * 32, 32);
         }
         // result padded to n * 32 bytes
-        return okm;
+        return Unpooled.wrappedBuffer(okm, 0, outputMinLength);
     }
 
     public static BIG hashToScalar(ByteBuf message, int readLength) {
         var dst = "HashToScalar-".getBytes(StandardCharsets.US_ASCII);
-        var okm = paddedXmdExpand(message, readLength, 48, dst);
-        var u = new FP(DBIG.fromBytes(Arrays.copyOf(okm, 48)).mod(CURVE_ORDER));
+        var okm = xmdExpand(message, readLength, 48, dst);
+        var u = new FP(DBIG.fromBytes(ByteBufUtil.getBytes(okm, 0, 48)).mod(CURVE_ORDER));
         return u.redc();
     }
 
     public static ECP hashToPoint(ByteBuf message, int readLength) {
         var dst = "BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_".getBytes(StandardCharsets.US_ASCII);
-        var okm = paddedXmdExpand(message, readLength, 2 * 64, dst);
-        var fd = new byte[64];
-        System.arraycopy(okm, 0, fd, 0, 64);
-        var p = ECP.map2point(new FP(DBIG.fromBytes(fd).mod(MODULUS)));
-        System.arraycopy(okm, 64, fd, 0, 64);
-        p.add(ECP.map2point(new FP(DBIG.fromBytes(fd).mod(MODULUS))));
+        var okm = xmdExpand(message, readLength, 2 * 64, dst);
+        var u0 = new FP(DBIG.fromBytes(ByteBufUtil.getBytes(okm, 0, 64)).mod(MODULUS));
+        var u1 = new FP(DBIG.fromBytes(ByteBufUtil.getBytes(okm, 64, 64)).mod(MODULUS));
+        var p = ECP.map2point(u0);
+        p.add(ECP.map2point(u1));
         p.cfp();
         p.affine();
         return p;
@@ -150,9 +190,21 @@ public final class BLS12381 {
         return PAIR.fexp(PAIR.ate2(pubKey1, signature1, GENERATOR_NEGATED, signature2));
     }
 
-    public static void pairingToIndex(FP12 pairing, ByteBuf index) {
-        var bytes = new byte[CONFIG_BIG.MODBYTES * 12];
-        pairing.toBytes(bytes);
+    public static void pairingToIndexBE(FP12 pairing, ByteBuf index) {
+        var bytes = new byte[CONFIG_BIG.MODBYTES * 2];
+        // MIRACL serializes FP12 using an internal tower layout/order (FP12 -> FP4 -> FP2)
+        // here we normalize to common big-endian order by permuting the 6 FP2 numbers
+        pairing.getc().getb().toBytes(bytes);
+        index.writeBytes(bytes);
+        pairing.geta().getb().toBytes(bytes);
+        index.writeBytes(bytes);
+        pairing.getb().geta().toBytes(bytes);
+        index.writeBytes(bytes);
+        pairing.getb().getb().toBytes(bytes);
+        index.writeBytes(bytes);
+        pairing.getc().geta().toBytes(bytes);
+        index.writeBytes(bytes);
+        pairing.geta().geta().toBytes(bytes);
         index.writeBytes(bytes);
     }
 
@@ -273,7 +325,7 @@ public final class BLS12381 {
 
     public static ECP2 keyValidate(ByteBuf pubKey) {
         var point = pubKeyToPoint(pubKey);
-        if (ECP2.generator().equals(point)) {
+        if (point.is_infinity()) {
             throw new IllegalArgumentException("invalid pubkey");
         }
         return pubKeySubgroupCheck(point);
