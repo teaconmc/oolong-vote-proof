@@ -1,8 +1,5 @@
 package org.teacon.ovp.util;
 
-import com.google.common.collect.Comparators;
-
-import java.util.Comparator;
 import java.util.regex.Pattern;
 
 public final class TagReference implements Comparable<TagReference> {

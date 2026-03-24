@@ -1,6 +1,5 @@
 package org.teacon.ovp.payload;
 
-import com.google.common.io.BaseEncoding;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
 import org.junit.jupiter.api.Test;
@@ -23,11 +22,9 @@ public final class SecretPublicKeyTest {
             "50c8edc8089832470c978048ac29d90b4b11d4066d091853300e6029ef480c2d955f1d9ab0dc0d21aec26d6f0dc9041c99a0343f" +
             "0d09c885215d3ee366f6415468577d7d9566b6820c5eaf03091ffab838ea8906e35a6b932a8b644a";
 
-    private static final BaseEncoding HEX = BaseEncoding.base16().lowerCase();
-
     @Test
     public void clientSecretKey_dump_roundTrips_inputBytes() {
-        var inputBytes = HEX.decode(CLIENT_SECRET_HEX);
+        var inputBytes = ByteBufUtil.decodeHexDump(CLIENT_SECRET_HEX);
         assertEquals(32, inputBytes.length);
 
         var input = Unpooled.wrappedBuffer(inputBytes);
@@ -47,7 +44,7 @@ public final class SecretPublicKeyTest {
 
     @Test
     public void serverSecretKey_dump_roundTrips_inputBytes() {
-        var inputBytes = HEX.decode(SERVER_SECRET_HEX);
+        var inputBytes = ByteBufUtil.decodeHexDump(SERVER_SECRET_HEX);
         assertEquals(128, inputBytes.length);
 
         var input = Unpooled.wrappedBuffer(inputBytes);
@@ -61,7 +58,7 @@ public final class SecretPublicKeyTest {
 
     @Test
     public void serverSecretKey_constructor_rejects_truncated_bytes() {
-        var goodBytes = HEX.decode(SERVER_SECRET_HEX);
+        var goodBytes = ByteBufUtil.decodeHexDump(SERVER_SECRET_HEX);
         assertEquals(128, goodBytes.length);
         var input = Unpooled.wrappedBuffer(Arrays.copyOf(goodBytes, 127));
         assertThrows(IndexOutOfBoundsException.class, () -> new ServerSecretKey(input));
@@ -69,14 +66,14 @@ public final class SecretPublicKeyTest {
 
     @Test
     public void serverPublicKey_dump_roundTrips_vector_and_matches_derived_publicKey() {
-        var serverSkBytes = HEX.decode(SERVER_SECRET_HEX);
+        var serverSkBytes = ByteBufUtil.decodeHexDump(SERVER_SECRET_HEX);
         var sk = assertDoesNotThrow(() -> new ServerSecretKey(Unpooled.wrappedBuffer(serverSkBytes)));
 
         var expected = Unpooled.buffer(4 * 96);
         var pk1 = new ServerPublicKey(sk);
         pk1.dump(expected);
 
-        var inputBytes = HEX.decode(SERVER_PUBLIC_HEX);
+        var inputBytes = ByteBufUtil.decodeHexDump(SERVER_PUBLIC_HEX);
         assertEquals(4 * 96, inputBytes.length);
         var pk2 = assertDoesNotThrow(() -> new ServerPublicKey(Unpooled.wrappedBuffer(inputBytes)));
 
@@ -89,7 +86,7 @@ public final class SecretPublicKeyTest {
 
     @Test
     public void serverPublicKey_constructor_accepts_vector_bytes_and_dump_matches_input() {
-        var inputBytes = HEX.decode(SERVER_PUBLIC_HEX);
+        var inputBytes = ByteBufUtil.decodeHexDump(SERVER_PUBLIC_HEX);
         assertEquals(4 * 96, inputBytes.length);
 
         var input = Unpooled.wrappedBuffer(inputBytes);

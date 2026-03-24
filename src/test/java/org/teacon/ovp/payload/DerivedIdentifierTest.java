@@ -1,6 +1,5 @@
 package org.teacon.ovp.payload;
 
-import com.google.common.io.BaseEncoding;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
 import org.junit.jupiter.api.Test;
@@ -27,11 +26,9 @@ public final class DerivedIdentifierTest {
             "4c0bf61fef4c2d358f6307b16a334e0d9bc09ca64f91bd13fc76676506b6c9e4ad7d07a80c20d8539b005cbbfe47ac5d23513b92" +
             "24f3607e0b182bdbfc412c2a6d96fecfff28085fd76fae8f";
 
-    private static final BaseEncoding HEX = BaseEncoding.base16().lowerCase();
-
     @Test
     public void derivedIdentifier_dump_and_index_match_vectors_and_roundTrip_from_dump_bytes() {
-        var clientSkBytes = HEX.decode(CLIENT_SECRET_HEX);
+        var clientSkBytes = ByteBufUtil.decodeHexDump(CLIENT_SECRET_HEX);
         var clientSk = assertDoesNotThrow(() -> new ClientSecretKey(Unpooled.wrappedBuffer(clientSkBytes)));
 
         var derived1 = new DerivedIdentifier(WORK, clientSk);
@@ -39,20 +36,20 @@ public final class DerivedIdentifierTest {
         var dump1 = Unpooled.buffer(48);
         derived1.dump(dump1);
         assertEquals(48, dump1.readableBytes());
-        assertEquals(EXPECTED_DUMP_HEX, HEX.encode(ByteBufUtil.getBytes(dump1)));
+        assertEquals(EXPECTED_DUMP_HEX, ByteBufUtil.hexDump(dump1));
 
         var index1 = derived1.index();
         assertEquals(576, index1.asBytes().length);
         assertEquals(INDEX_BE_DUMP_HEX, index1.toString());
 
-        var dumpBytes = HEX.decode(EXPECTED_DUMP_HEX);
+        var dumpBytes = ByteBufUtil.decodeHexDump(EXPECTED_DUMP_HEX);
         var in = Unpooled.wrappedBuffer(dumpBytes);
         var derived2 = assertDoesNotThrow(() -> new DerivedIdentifier(in));
         assertEquals(0, in.readableBytes());
 
         var dump2 = Unpooled.buffer(48);
         derived2.dump(dump2);
-        assertEquals(EXPECTED_DUMP_HEX, HEX.encode(ByteBufUtil.getBytes(dump2)));
+        assertEquals(EXPECTED_DUMP_HEX, ByteBufUtil.hexDump(dump2));
         assertEquals(INDEX_BE_DUMP_HEX, derived2.index().toString());
     }
 

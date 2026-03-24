@@ -1,6 +1,5 @@
 package org.teacon.ovp.payload;
 
-import com.google.common.io.BaseEncoding;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
 import org.junit.jupiter.api.Test;
@@ -15,11 +14,9 @@ public final class CommitRevocationTest {
     private static final String CLIENT_COMMIT_HEX = "96db07bb3b9d3d965e006041125cd8a88f9b0acbee28a3e7c085b4f120e75fbe" +
             "a2087f25d90e5eff4e4d1688a261ece9";
 
-    private static final BaseEncoding HEX = BaseEncoding.base16().lowerCase();
-
     @Test
     public void clientPointCommit_dump_roundTrips_inputBytes() {
-        var inputBytes = HEX.decode(CLIENT_COMMIT_HEX);
+        var inputBytes = ByteBufUtil.decodeHexDump(CLIENT_COMMIT_HEX);
         assertEquals(48, inputBytes.length);
 
         var input = Unpooled.wrappedBuffer(inputBytes);
@@ -33,11 +30,11 @@ public final class CommitRevocationTest {
 
     @Test
     public void clientPointCommit_constructor_fromSecretKey_matches_vector() {
-        var secretBytes = HEX.decode(CLIENT_SECRET_HEX);
+        var secretBytes = ByteBufUtil.decodeHexDump(CLIENT_SECRET_HEX);
         assertEquals(32, secretBytes.length);
         var sk = assertDoesNotThrow(() -> new ClientSecretKey(Unpooled.wrappedBuffer(secretBytes)));
 
-        var expectedBytes = HEX.decode(CLIENT_COMMIT_HEX);
+        var expectedBytes = ByteBufUtil.decodeHexDump(CLIENT_COMMIT_HEX);
         assertEquals(48, expectedBytes.length);
 
         var commit = new ClientPointCommit(sk);
@@ -49,7 +46,7 @@ public final class CommitRevocationTest {
 
     @Test
     public void clientRevocation_dump_roundTrips_inputBytes() {
-        var inputBytes = HEX.decode(CLIENT_REVOKE_HEX);
+        var inputBytes = ByteBufUtil.decodeHexDump(CLIENT_REVOKE_HEX);
         assertEquals(96, inputBytes.length);
 
         var input = Unpooled.wrappedBuffer(inputBytes);
@@ -63,11 +60,11 @@ public final class CommitRevocationTest {
 
     @Test
     public void clientRevocation_constructor_fromSecretKey_matches_vector() {
-        var secretBytes = HEX.decode(CLIENT_SECRET_HEX);
+        var secretBytes = ByteBufUtil.decodeHexDump(CLIENT_SECRET_HEX);
         assertEquals(32, secretBytes.length);
         var sk = assertDoesNotThrow(() -> new ClientSecretKey(Unpooled.wrappedBuffer(secretBytes)));
 
-        var expectedBytes = HEX.decode(CLIENT_REVOKE_HEX);
+        var expectedBytes = ByteBufUtil.decodeHexDump(CLIENT_REVOKE_HEX);
         assertEquals(96, expectedBytes.length);
 
         var cr = new ClientRevocation(sk);
@@ -77,4 +74,3 @@ public final class CommitRevocationTest {
         assertArrayEquals(expectedBytes, ByteBufUtil.getBytes(output));
     }
 }
-

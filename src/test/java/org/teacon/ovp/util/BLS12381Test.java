@@ -1,6 +1,5 @@
 package org.teacon.ovp.util;
 
-import com.google.common.io.BaseEncoding;
 import com.google.common.io.Resources;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
@@ -16,7 +15,6 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.*;
 
 class BLS12381Test {
-    private static final BaseEncoding HEX;
     private static final List<G1Vector> G1_VECTORS;
     private static final List<ScalarVector> SCALAR_VECTORS;
     private static final List<FMAVector> FMA_VECTORS;
@@ -26,7 +24,6 @@ class BLS12381Test {
         var scalar = "vectors/bls12-381/bls12-381-scalar-test-vectors.txt";
         var fma = "vectors/bls12-381/bls12-381-fma-test-vectors.txt";
         try {
-            HEX = BaseEncoding.base16().lowerCase();
             var g1Lines = Resources.readLines(Resources.getResource(g1), UTF_8);
             var scalarLines = Resources.readLines(Resources.getResource(scalar), UTF_8);
             var fmaLines = Resources.readLines(Resources.getResource(fma), UTF_8);
@@ -44,7 +41,7 @@ class BLS12381Test {
         for (var vector : SCALAR_VECTORS) {
             var field = BLS12381.hashToScalar(vector.okmAscii.slice(), vector.okmAscii.readableBytes());
             BLS12381.fieldToBytes(field, scalar.clear());
-            assertEquals(vector.expectedScalarHex, HEX.encode(ByteBufUtil.getBytes(scalar)));
+            assertEquals(vector.expectedScalarHex, ByteBufUtil.hexDump(scalar));
         }
     }
 
@@ -55,7 +52,7 @@ class BLS12381Test {
         for (var vector : G1_VECTORS) {
             var secret = BLS12381.secretKeyToField(vector.privateKey.slice());
             BLS12381.coreSign(secret, vector.message.slice(), vector.message.readableBytes(), signature.clear());
-            assertEquals(vector.expectedSignatureHex, HEX.encode(ByteBufUtil.getBytes(signature)));
+            assertEquals(vector.expectedSignatureHex, ByteBufUtil.hexDump(signature));
             BLS12381.skToPk(secret, pubKey.clear());
             assertTrue(BLS12381.coreVerify(pubKey, vector.message.slice(), vector.message.readableBytes(), signature));
         }
@@ -75,7 +72,7 @@ class BLS12381Test {
                 "e899e6ce33c534767b8ec37e8cd7a6971e7bc44ac7fba50064e0ba96abec325cabbb760ef86d0c41ffada8f12ddb4d853744" +
                 "8f85319503dce8f4c489d1027f73050c85e9bb8d30006d6ca575c675fb26063c928adc7702d12f7063064d644f84abd9c5e0" +
                 "756ef9aca44696e5efb5c2de4a9fcab4f240c2de3b94b39d57121f5868fbea9017";
-        var entropyBytes = Unpooled.wrappedBuffer(HEX.decode(entropyBytesHex));
+        var entropyBytes = Unpooled.wrappedBuffer(ByteBufUtil.decodeHexDump(entropyBytesHex));
         var entropy = (RandomGenerator) entropyBytes::readLongLE;
 
         assertEquals(576, entropyBytes.readableBytes());
@@ -99,15 +96,15 @@ class BLS12381Test {
 
         var expected = new byte[32];
         entropyBytes.readBytes(expected);
-        assertEquals("1748522d0e0ab5dd6319edee1b60fd241ad60dd16124d262305f960960f2e0a8", HEX.encode(expected));
+        assertEquals("1748522d0e0ab5dd6319edee1b60fd241ad60dd16124d262305f960960f2e0a8", ByteBufUtil.hexDump(expected));
         entropyBytes.readBytes(expected);
-        assertEquals("30f83848c1fb540ba98ea32593bba4ec3a4c3a1e21dae696e21e28b78b36a1d7", HEX.encode(expected));
+        assertEquals("30f83848c1fb540ba98ea32593bba4ec3a4c3a1e21dae696e21e28b78b36a1d7", ByteBufUtil.hexDump(expected));
         entropyBytes.readBytes(expected);
-        assertEquals("233a56cb736a9eda91e6d1829d76a75f570f622ea42f2e9728113e1c969893e3", HEX.encode(expected));
+        assertEquals("233a56cb736a9eda91e6d1829d76a75f570f622ea42f2e9728113e1c969893e3", ByteBufUtil.hexDump(expected));
         entropyBytes.readBytes(expected);
-        assertEquals("0ea04afc25b7e873c7309c2f9f5f929760eea9b3edb5fc3d9207fa0187a04465", HEX.encode(expected));
+        assertEquals("0ea04afc25b7e873c7309c2f9f5f929760eea9b3edb5fc3d9207fa0187a04465", ByteBufUtil.hexDump(expected));
         entropyBytes.readBytes(expected);
-        assertEquals("5134505addbcc49cb6cf9881a6fa1f2eb17a9f75162e1da13a154397821a4a86", HEX.encode(expected));
+        assertEquals("5134505addbcc49cb6cf9881a6fa1f2eb17a9f75162e1da13a154397821a4a86", ByteBufUtil.hexDump(expected));
     }
 
     @Test
@@ -119,7 +116,7 @@ class BLS12381Test {
             var c = BLS12381.bytesToField(vector.c.slice());
             var result = BLS12381.fieldMultiplyAdd(a, b, c);
             BLS12381.fieldToBytes(result, out.clear());
-            assertEquals(vector.expectedHex, HEX.encode(ByteBufUtil.getBytes(out)));
+            assertEquals(vector.expectedHex, ByteBufUtil.hexDump(out));
         }
     }
 
@@ -218,8 +215,8 @@ class BLS12381Test {
             if (parts.length != 3) {
                 throw new IllegalArgumentException("Unexpected vector format: " + line);
             }
-            var privateKey = Unpooled.wrappedBuffer(HEX.decode(parts[0])).asReadOnly();
-            var message = Unpooled.wrappedBuffer(HEX.decode(parts[1])).asReadOnly();
+            var privateKey = Unpooled.wrappedBuffer(ByteBufUtil.decodeHexDump(parts[0])).asReadOnly();
+            var message = Unpooled.wrappedBuffer(ByteBufUtil.decodeHexDump(parts[1])).asReadOnly();
             return new G1Vector(privateKey, message, parts[2]);
         }
     }
@@ -241,9 +238,9 @@ class BLS12381Test {
             if (parts.length != 4) {
                 throw new IllegalArgumentException("Unexpected vector format: " + line);
             }
-            var a = Unpooled.wrappedBuffer(HEX.decode(parts[0])).asReadOnly();
-            var b = Unpooled.wrappedBuffer(HEX.decode(parts[1])).asReadOnly();
-            var c = Unpooled.wrappedBuffer(HEX.decode(parts[2])).asReadOnly();
+            var a = Unpooled.wrappedBuffer(ByteBufUtil.decodeHexDump(parts[0])).asReadOnly();
+            var b = Unpooled.wrappedBuffer(ByteBufUtil.decodeHexDump(parts[1])).asReadOnly();
+            var c = Unpooled.wrappedBuffer(ByteBufUtil.decodeHexDump(parts[2])).asReadOnly();
             return new FMAVector(a, b, c, parts[3]);
         }
     }

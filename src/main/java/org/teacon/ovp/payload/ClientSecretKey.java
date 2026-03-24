@@ -1,8 +1,6 @@
 package org.teacon.ovp.payload;
 
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufUtil;
-import io.netty.buffer.Unpooled;
 import org.teacon.ovp.miracl.core.BLS12381.BIG;
 import org.teacon.ovp.util.BLS12381;
 

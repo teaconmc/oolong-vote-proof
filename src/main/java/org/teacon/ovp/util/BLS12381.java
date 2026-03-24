@@ -7,7 +7,6 @@ import io.netty.buffer.Unpooled;
 import org.teacon.ovp.miracl.core.BLS12381.*;
 
 import java.nio.charset.StandardCharsets;
-import java.security.SecureRandom;
 import java.util.random.RandomGenerator;
 
 public final class BLS12381 {
