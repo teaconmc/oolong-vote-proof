@@ -22,6 +22,10 @@ public final class ClientSecretKey {
 
     final BIG s;
 
+    ClientSecretKey(BIG s) {
+        this.s = new BIG(s);
+    }
+
     ClientSecretKey(ByteBuf input) {
         this.s = BLS12381.secretKeyToField(input);
     }

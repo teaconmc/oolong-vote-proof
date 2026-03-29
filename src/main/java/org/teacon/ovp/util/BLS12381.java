@@ -6,11 +6,16 @@ import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
 import org.teacon.ovp.miracl.core.BLS12381.*;
 
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.PBEKeySpec;
+import java.nio.CharBuffer;
 import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
+import java.text.Normalizer;
+import java.util.Arrays;
 import java.util.random.RandomGenerator;
 
 public final class BLS12381 {
-    private static final BIG ZERO;
     private static final BIG MODULUS;
     private static final BIG CURVE_ORDER;
     private static final ECP2 GENERATOR_NEGATED;
@@ -18,7 +23,6 @@ public final class BLS12381 {
     private static final int CURVE_ORDER_ZEROS = CONFIG_BIG.MODBYTES - CURVE_ORDER_BYTES;
 
     static {
-        ZERO = new BIG(0);
         MODULUS = new BIG(ROM.Modulus);
         CURVE_ORDER = new BIG(ROM.CURVE_Order);
         GENERATOR_NEGATED = ECP2.generator();
@@ -76,7 +80,7 @@ public final class BLS12381 {
 
     public static BIG randomToField(RandomGenerator rng) {
         var field = new BIG(0);
-        while (BIG.comp(field, ZERO) <= 0) {
+        while (field.nbits() == 0) {
             var bytes = new byte[CONFIG_BIG.MODBYTES * 2];
             rng.nextBytes(bytes);
             var dbig = DBIG.fromBytes(bytes);
@@ -88,10 +92,17 @@ public final class BLS12381 {
     public static BIG bytesToField(ByteBuf secretKey) {
         var bytes = new byte[CONFIG_BIG.MODBYTES];
         secretKey.readBytes(bytes, CURVE_ORDER_ZEROS, CURVE_ORDER_BYTES);
-        return BIG.fromBytes(bytes);
+        var field = BIG.fromBytes(bytes);
+        if (BIG.comp(field, CURVE_ORDER) >= 0) {
+            throw new IllegalArgumentException("invalid field value");
+        }
+        return field;
     }
 
     public static void fieldToBytes(BIG field, ByteBuf secretKey) {
+        if (BIG.comp(field, CURVE_ORDER) >= 0) {
+            throw new IllegalArgumentException("invalid field value");
+        }
         var bytes = new byte[CONFIG_BIG.MODBYTES];
         field.toBytes(bytes);
         secretKey.writeBytes(bytes, CURVE_ORDER_ZEROS, CURVE_ORDER_BYTES);
@@ -99,14 +110,14 @@ public final class BLS12381 {
 
     public static BIG secretKeyToField(ByteBuf secretKey) {
         var field = bytesToField(secretKey);
-        if (BIG.comp(field, ZERO) <= 0 || BIG.comp(field, CURVE_ORDER) >= 0) {
+        if (field.nbits() == 0) {
             throw new IllegalArgumentException("invalid secret key");
         }
         return field;
     }
 
     public static void fieldToSecretKey(BIG field, ByteBuf secretKey) {
-        if (BIG.comp(field, ZERO) <= 0 || BIG.comp(field, CURVE_ORDER) >= 0) {
+        if (field.nbits() == 0) {
             throw new IllegalArgumentException("invalid secret key");
         }
         fieldToBytes(field, secretKey);
@@ -117,6 +128,12 @@ public final class BLS12381 {
         result.add(c);
         result.norm();
         result.mod(CURVE_ORDER);
+        return result;
+    }
+
+    public static BIG fieldInverse(BIG field) {
+        var result = new BIG(field);
+        result.invmodp(CURVE_ORDER);
         return result;
     }
 
@@ -134,7 +151,7 @@ public final class BLS12381 {
         var hasher = Hashing.sha256().newHasher();
         // noinspection UnstableApiUsage
         hasher.putBytes(h0).putBytes(h0);
-        for (var slice: slices) {
+        for (var slice : slices) {
             // noinspection UnstableApiUsage
             hasher.putBytes(slice);
         }
@@ -155,7 +172,7 @@ public final class BLS12381 {
             // noinspection UnstableApiUsage
             hasher.putBytes(h1).putByte((byte) (i + 1)).putBytes(dst).putByte((byte) dst.length);
             // noinspection UnstableApiUsage
-            hasher.hash().writeBytesTo(h1,0, 32);
+            hasher.hash().writeBytesTo(h1, 0, 32);
             System.arraycopy(h1, 0, okm, i * 32, 32);
         }
         // result padded to n * 32 bytes
@@ -167,6 +184,17 @@ public final class BLS12381 {
         var okm = xmdExpand(message, readLength, 48, dst);
         var u = new FP(DBIG.fromBytes(ByteBufUtil.getBytes(okm, 0, 48)).mod(CURVE_ORDER));
         return u.redc();
+    }
+
+    public static BIG hashToScalar(char[] password, ECP point) {
+        var normalizedPassword = Normalizer.normalize(CharBuffer.wrap(password), Normalizer.Form.NFKD);
+        var messageCount = ByteBufUtil.utf8Bytes(normalizedPassword) + CONFIG_BIG.MODBYTES;
+        var message = Unpooled.buffer(messageCount);
+        message.writeCharSequence(normalizedPassword, StandardCharsets.UTF_8);
+        BLS12381.pointToSignature(point, message);
+        var result = hashToScalar(message, messageCount);
+        message.setZero(0, messageCount);
+        return result;
     }
 
     public static ECP hashToPoint(ByteBuf message, int readLength) {
@@ -344,6 +372,31 @@ public final class BLS12381 {
             return pair.isunity();
         } catch (RuntimeException e) {
             return false;
+        }
+    }
+
+    public static void pbkdf2(char[] password, String salt, ByteBuf output, int outputLength) {
+        if (outputLength < 0) {
+            throw new IllegalArgumentException("outputLength < 0");
+        }
+        if (outputLength == 0) {
+            return;
+        }
+        var normalizedPassword = Normalizer.normalize(CharBuffer.wrap(password), Normalizer.Form.NFKD).toCharArray();
+        var saltBytes = Normalizer.normalize(salt, Normalizer.Form.NFKD).getBytes(StandardCharsets.UTF_8);
+        var spec = new PBEKeySpec(normalizedPassword, saltBytes, 2048, outputLength * 8);
+        try {
+            var skf = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA512");
+            var derived = skf.generateSecret(spec).getEncoded();
+            if (derived.length != outputLength) {
+                throw new IllegalStateException("unexpected PBKDF2 output length: " + derived.length + " != " + outputLength);
+            }
+            output.writeBytes(derived);
+        } catch (GeneralSecurityException e) {
+            throw new RuntimeException(e);
+        } finally {
+            spec.clearPassword();
+            Arrays.fill(normalizedPassword, '\0');
         }
     }
 
