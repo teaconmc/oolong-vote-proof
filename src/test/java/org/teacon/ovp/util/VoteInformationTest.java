@@ -7,7 +7,7 @@ import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-public final class VoteInformationTest {
+class VoteInformationTest {
     @Test
     public void constructor_accessors_copy_inputs_and_return_immutable_sorted_views() {
         var commentsIn = new ArrayList<>(List.of("first", "second"));

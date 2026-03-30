@@ -8,7 +8,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-public final class DerivedIdentifierTest {
+class DerivedIdentifierTest {
     private static final UUID WORK = UUID.fromString("89abcdef-0123-4567-89ab-cdef01234567");
     private static final String CLIENT_SECRET_HEX = "15c026745a89f94dc78abebf65579b292c8c0924b2603c0736cfba6d28a47a2f";
     private static final String EXPECTED_DUMP_HEX = "ad400d032aefad184d33f14f8debabf5bfe330cd0392f182efe74c81d1be2e65" +

@@ -7,7 +7,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-public final class TagReferenceTest {
+class TagReferenceTest {
     @Test
     public void constructors_accessors_equals_and_hashCode_work_for_common_paths() {
         var ref1 = new TagReference("foo", "bar/baz");

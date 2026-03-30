@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-public final class CommitRevocationTest {
+class CommitRevocationTest {
     private static final String CLIENT_SECRET_HEX = "15c026745a89f94dc78abebf65579b292c8c0924b2603c0736cfba6d28a47a2f";
     private static final String CLIENT_REVOKE_HEX = "8374fd218fdebcf24ee4a15b77ab03d5c98f68a16a7e7af11435ccd79ac60b22" +
             "8a5d84e53b56f88fc6969bfb55e0ecc20fcadcf2b740dd07adf87beec5cf3b34c1b7a2080dd1c122e5368f0bb5b149444a1a3231" +

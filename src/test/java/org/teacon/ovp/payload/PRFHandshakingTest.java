@@ -11,7 +11,7 @@ import java.util.random.RandomGenerator;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-public final class PRFHandshakingTest {
+class PRFHandshakingTest {
     private static final String SERVER_SECRET_HEX = "267cc15949dcf8ef55f0a325b8f56e32d296b41251a7c94a9101b1ad41106199" +
             "3410820adc72d75744970568546b5a7a5e2305b7b48a52aff2b43f275f58c37746ad2ad93622109df93a0666cdc5dd8c899077f4" +
             "9f46f1fce99bd1520b3a41975771318129301ae63bbe78ae8628c99139b69e16153e92217ede3f00c2ec17c4";
