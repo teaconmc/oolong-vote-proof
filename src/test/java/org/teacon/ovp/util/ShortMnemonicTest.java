@@ -26,26 +26,36 @@ class ShortMnemonicTest {
     }
 
     @Test
-    void shortMnemonic_and_pbkdf2_match_BIP39_testVectors_for_128bit_entropy() {
-        var out = Unpooled.buffer(64);
+    void shortMnemonic_and_pbkdf2_match_BIP39_testVectors_for_128bit_entropy_and_variable_outputLength() {
+        var out = Unpooled.buffer(256);
         for (var vector : VECTORS) {
             var entropy = Unpooled.wrappedBuffer(ByteBufUtil.decodeHexDump(vector.entropyHex));
             var rng = (RandomGenerator) entropy::readLongLE;
             var mnemonic = new ShortMnemonic(rng);
             assertEquals(0, entropy.readableBytes());
             assertEquals(vector.mnemonic, new String(mnemonic.chars()));
-            BLS12381.pbkdf2(mnemonic.chars(), "mnemonicTREZOR", out.clear(), 64);
-            assertEquals(vector.seedHex, ByteBufUtil.hexDump(out));
+            for (var outputLength : new int[]{64, 128, 256}) {
+                BLS12381.pbkdf2(mnemonic.chars(), "mnemonicTREZOR", out.clear(), outputLength);
+                assertEquals(vector.seedHex(outputLength), ByteBufUtil.hexDump(out));
+            }
         }
     }
 
-    private record Vector(String entropyHex, String mnemonic, String seedHex) {
+    private record Vector(String entropyHex, String mnemonic, String seed256Hex) {
         private static Vector parse(String line) {
             var parts = line.split(":", -1);
             if (parts.length != 3) {
                 throw new IllegalArgumentException("Unexpected vector format: " + line);
             }
             return new Vector(parts[0].strip(), parts[1].strip(), parts[2].strip());
+        }
+
+        private String seedHex(int outputLength) {
+            var outputHexLength = outputLength * 2;
+            if (outputHexLength > this.seed256Hex.length()) {
+                throw new IllegalArgumentException("Unexpected outputLength: " + outputLength);
+            }
+            return this.seed256Hex.substring(0, outputHexLength);
         }
     }
 }
