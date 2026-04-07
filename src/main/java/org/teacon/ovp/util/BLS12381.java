@@ -6,11 +6,7 @@ import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
 import org.teacon.ovp.miracl.core.BLS12381.*;
 
-import javax.crypto.SecretKeyFactory;
-import javax.crypto.spec.PBEKeySpec;
-import java.nio.CharBuffer;
 import java.nio.charset.StandardCharsets;
-import java.security.GeneralSecurityException;
 import java.text.Normalizer;
 import java.util.Arrays;
 import java.util.random.RandomGenerator;
@@ -184,17 +180,6 @@ public final class BLS12381 {
         var okm = xmdExpand(message, readLength, 48, dst);
         var u = new FP(DBIG.fromBytes(ByteBufUtil.getBytes(okm, 0, 48)).mod(CURVE_ORDER));
         return u.redc();
-    }
-
-    public static BIG hashToScalar(char[] password, ECP point) {
-        var normalizedPassword = Normalizer.normalize(CharBuffer.wrap(password), Normalizer.Form.NFKD);
-        var messageCount = ByteBufUtil.utf8Bytes(normalizedPassword) + CONFIG_BIG.MODBYTES;
-        var message = Unpooled.buffer(messageCount);
-        message.writeCharSequence(normalizedPassword, StandardCharsets.UTF_8);
-        BLS12381.pointToSignature(point, message);
-        var result = hashToScalar(message, messageCount);
-        message.setZero(0, messageCount);
-        return result;
     }
 
     public static ECP hashToPoint(ByteBuf message, int readLength) {
@@ -375,29 +360,54 @@ public final class BLS12381 {
         }
     }
 
-    public static void pbkdf2(char[] password, String salt, ByteBuf output, int outputLength) {
-        if (outputLength < 0) {
-            throw new IllegalArgumentException("outputLength < 0");
-        }
-        if (outputLength == 0) {
-            return;
-        }
-        var normalizedPassword = Normalizer.normalize(CharBuffer.wrap(password), Normalizer.Form.NFKD).toCharArray();
-        var saltBytes = Normalizer.normalize(salt, Normalizer.Form.NFKD).getBytes(StandardCharsets.UTF_8);
-        var spec = new PBEKeySpec(normalizedPassword, saltBytes, 2048, outputLength * 8);
-        try {
-            var skf = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA512");
-            var derived = skf.generateSecret(spec).getEncoded();
-            if (derived.length != outputLength) {
-                throw new IllegalStateException("unexpected PBKDF2 output length: " + derived.length + " != " + outputLength);
+    public static void pbkdf2(ByteBuf password, int passwordByteLength,
+                              String salt, boolean xorWithExisting, ByteBuf output, int outputLength) {
+        // password bytes consumed by this derivation
+        var passwordSlice = password.readSlice(passwordByteLength);
+        var hmac = Hashing.hmacSha512(ByteBufUtil.getBytes(passwordSlice));
+        // salt input with trailing 32-bit block counter
+        var blockInput = Unpooled.buffer(salt.length() + 4);
+        blockInput.writeCharSequence(Normalizer.normalize(salt, Normalizer.Form.NFKD), StandardCharsets.UTF_8);
+        blockInput.markWriterIndex().writeZero(4);
+        // output bookkeeping
+        var baseWriter = output.writerIndex();
+        var blocks = (outputLength + 63) / 64;
+        var written = 0;
+        // workspace: [0..63]=accumulator, [64..127]=latest U_j
+        var buffer = new byte[128];
+        for (var i = 1; i <= blocks; ++i) {
+            // set INT(i) and derive U_1
+            blockInput.resetWriterIndex().writeInt(i);
+            hmac.hashBytes(ByteBufUtil.getBytes(blockInput)).writeBytesTo(buffer, 64, 64);
+            // let T_i starts from U_1 then fold U_j into T_i
+            System.arraycopy(buffer, 64, buffer, 0, 64);
+            for (var j = 1; j < 2048; ++j) {
+                hmac.hashBytes(buffer, 64, 64).writeBytesTo(buffer, 64, 64);
+                for (var k = 0; k < 64; ++k) {
+                    buffer[k] ^= buffer[64 + k];
+                }
             }
-            output.writeBytes(derived);
-        } catch (GeneralSecurityException e) {
-            throw new RuntimeException(e);
-        } finally {
-            spec.clearPassword();
-            Arrays.fill(normalizedPassword, '\0');
+            // last block may be shorter
+            var copyLength = Math.min(64, outputLength - written);
+            var targetStart = baseWriter + written;
+            output.ensureWritable(copyLength);
+            if (xorWithExisting) {
+                // in-place xor over target range
+                for (var k = 0; k < copyLength; ++k) {
+                    var target = targetStart + k;
+                    output.setByte(target, buffer[k] ^ output.getByte(target));
+                }
+                output.writerIndex(baseWriter + written);
+            } else {
+                // override the output
+                output.writeBytes(buffer, 0, copyLength);
+            }
+            written += copyLength;
         }
+        // clear intermediate secrets
+        passwordSlice.setZero(0, passwordSlice.readableBytes());
+        blockInput.setZero(0, blockInput.readableBytes());
+        Arrays.fill(buffer, (byte) 0);
     }
 
     private BLS12381() {

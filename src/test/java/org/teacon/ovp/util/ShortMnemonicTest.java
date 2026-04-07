@@ -6,6 +6,8 @@ import io.netty.buffer.Unpooled;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.nio.CharBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.random.RandomGenerator;
 
@@ -35,7 +37,9 @@ class ShortMnemonicTest {
             assertEquals(0, entropy.readableBytes());
             assertEquals(vector.mnemonic, new String(mnemonic.chars()));
             for (var outputLength : new int[]{64, 128, 256}) {
-                BLS12381.pbkdf2(mnemonic.chars(), "mnemonicTREZOR", out.clear(), outputLength);
+                var mnemonicUtf8 = Unpooled.copiedBuffer(CharBuffer.wrap(mnemonic.chars()), StandardCharsets.UTF_8);
+                BLS12381.pbkdf2(mnemonicUtf8, mnemonicUtf8.readableBytes(), "mnemonicTREZOR", false, out.clear(), outputLength);
+                mnemonicUtf8.setZero(0, mnemonicUtf8.readableBytes());
                 assertEquals(vector.seedHex(outputLength), ByteBufUtil.hexDump(out));
             }
         }

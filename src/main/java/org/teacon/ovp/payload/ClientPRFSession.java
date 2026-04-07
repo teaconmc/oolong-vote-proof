@@ -8,6 +8,8 @@ import org.teacon.ovp.miracl.core.BLS12381.ECP;
 import org.teacon.ovp.util.BLS12381;
 import org.teacon.ovp.util.ShortMnemonic;
 
+import java.nio.CharBuffer;
+import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.InvalidKeyException;
 import java.util.Optional;
@@ -18,9 +20,9 @@ public final class ClientPRFSession {
         return new ClientPRFSession(pass, VoteChallenges.RANDOM);
     }
 
-    public static ClientPRFSession from(ClientPRFSession old, ServerPRFPresent answer, char[] pass) {
+    public static ClientPRFSession from(ClientPRFSession old, ServerPRFPresent answer) {
         try {
-            return new ClientPRFSession(old, answer, pass);
+            return new ClientPRFSession(old, answer);
         } catch (RuntimeException e) {
             return old;
         }
@@ -57,19 +59,21 @@ public final class ClientPRFSession {
     final BIG sMaster;
 
     ClientPRFSession(char[] pass, RandomGenerator rng) {
-        var passBytes = Unpooled.buffer(64);
-        BLS12381.pbkdf2(pass, "password", passBytes, 64);
+        var passBytes = Unpooled.copiedBuffer(CharBuffer.wrap(pass), StandardCharsets.UTF_8);
         this.r = BLS12381.randomToField(rng);
-        this.pPass = BLS12381.hashToPoint(passBytes, 64);
-        passBytes.setZero(0, 64);
+        this.pPass = BLS12381.hashToPoint(passBytes, passBytes.readableBytes());
+        passBytes.setZero(0, passBytes.readableBytes());
         this.sMaster = new BIG(0);
     }
 
-    ClientPRFSession(ClientPRFSession old, ServerPRFPresent answer, char[] pass) {
+    ClientPRFSession(ClientPRFSession old, ServerPRFPresent answer) {
         this.r = old.r;
         this.pPass = old.pPass;
         var cipherKeyBytes = Unpooled.buffer(32);
-        BLS12381.fieldToBytes(BLS12381.hashToScalar(pass, answer.n.mul(BLS12381.fieldInverse(old.r))), cipherKeyBytes);
+        var prfResultBytes = Unpooled.buffer(48);
+        BLS12381.pointToSignature(answer.n.mul(BLS12381.fieldInverse(old.r)), prfResultBytes);
+        BLS12381.pbkdf2(prfResultBytes, 48, "password", false, cipherKeyBytes, 32);
+        prfResultBytes.setZero(0, 48);
         var masterBytes = answer.ePass.decrypt(ByteBufUtil.getBytes(cipherKeyBytes));
         this.sMaster = BLS12381.secretKeyToField(Unpooled.wrappedBuffer(masterBytes));
     }
@@ -78,7 +82,9 @@ public final class ClientPRFSession {
         this.r = old.r;
         this.pPass = old.pPass;
         var cipherKeyBytes = Unpooled.buffer(32);
-        BLS12381.pbkdf2(recoveryKey.chars(), "mnemonic", cipherKeyBytes, 32);
+        var mnemBytes = Unpooled.copiedBuffer(CharBuffer.wrap(recoveryKey.chars()), StandardCharsets.UTF_8);
+        BLS12381.pbkdf2(mnemBytes, mnemBytes.readableBytes(), "mnemonic", false, cipherKeyBytes, 32);
+        mnemBytes.setZero(0, mnemBytes.readableBytes());
         var masterBytes = answer.ePass.decrypt(ByteBufUtil.getBytes(cipherKeyBytes));
         this.sMaster = BLS12381.secretKeyToField(Unpooled.wrappedBuffer(masterBytes));
     }
@@ -89,4 +95,3 @@ public final class ClientPRFSession {
         this.sMaster = BLS12381.bytesToField(input);
     }
 }
-

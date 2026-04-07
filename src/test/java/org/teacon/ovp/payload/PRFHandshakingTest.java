@@ -7,6 +7,8 @@ import org.teacon.ovp.util.BLS12381;
 import org.teacon.ovp.util.GCM256Cipher;
 import org.teacon.ovp.util.ShortMnemonic;
 
+import java.nio.CharBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.random.RandomGenerator;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -82,10 +84,11 @@ class PRFHandshakingTest {
         var master = new byte[32];
         master[31] = 0x01;
 
-        var n = request.m.mul(serverSk.v);
+        var n = request.m.mul(serverSk.v);;
+        var prfResultBytes = Unpooled.buffer(48);
+        BLS12381.pointToSignature(n.mul(BLS12381.fieldInverse(session0.r)), prfResultBytes);
         var passKeyBuf = Unpooled.buffer(32);
-        var passKeyField = BLS12381.hashToScalar(PASS, n.mul(BLS12381.fieldInverse(session0.r)));
-        BLS12381.fieldToBytes(passKeyField, passKeyBuf);
+        BLS12381.pbkdf2(prfResultBytes, 48, "password", false, passKeyBuf, 32);
         var passKey = ByteBufUtil.getBytes(passKeyBuf);
 
         var ePass = new GCM256Cipher(random, master, passKey);
@@ -102,12 +105,14 @@ class PRFHandshakingTest {
         present2.dump(presentDump2);
         assertArrayEquals(ByteBufUtil.getBytes(presentDump1), ByteBufUtil.getBytes(presentDump2));
 
-        var sessionPass = assertDoesNotThrow(() -> new ClientPRFSession(session0, present1, PASS));
+        var sessionPass = assertDoesNotThrow(() -> new ClientPRFSession(session0, present1));
         assertTrue(sessionPass.secret().isPresent());
 
         var recoveryKey = new ShortMnemonic(random);
         var mnemKeyBuf = Unpooled.buffer(32);
-        BLS12381.pbkdf2(recoveryKey.chars(), "mnemonic", mnemKeyBuf, 32);
+        var mnemonicUtf8 = Unpooled.copiedBuffer(CharBuffer.wrap(recoveryKey.chars()), StandardCharsets.UTF_8);
+        BLS12381.pbkdf2(mnemonicUtf8, mnemonicUtf8.readableBytes(), "mnemonic", false, mnemKeyBuf, 32);
+        mnemonicUtf8.setZero(0, mnemonicUtf8.readableBytes());
         var mnemKey = ByteBufUtil.getBytes(mnemKeyBuf);
 
         var ePass2 = new GCM256Cipher(random, master, mnemKey);
@@ -130,14 +135,17 @@ class PRFHandshakingTest {
         var answer = new ServerPRFAbsent(serverSk, request);
         var recoveryKey = new ShortMnemonic(random);
 
-        var override = new ClientPRFOverride(session, answer, PASS, recoveryKey, random);
-        var prfResult = answer.n.mul(BLS12381.fieldInverse(session.r));
+        var override = new ClientPRFOverride(session, answer, recoveryKey, random);
+        var prfResultBytes = Unpooled.buffer(48);
+        BLS12381.pointToSignature(answer.n.mul(BLS12381.fieldInverse(session.r)), prfResultBytes);
         var passKeyBuf = Unpooled.buffer(32);
-        BLS12381.fieldToBytes(BLS12381.hashToScalar(PASS, prfResult), passKeyBuf);
+        BLS12381.pbkdf2(prfResultBytes, 48, "password", false, passKeyBuf, 32);
         var passKey = ByteBufUtil.getBytes(passKeyBuf);
 
         var mnemKeyBuf = Unpooled.buffer(32);
-        BLS12381.pbkdf2(recoveryKey.chars(), "mnemonic", mnemKeyBuf, 32);
+        var mnemonicUtf8 = Unpooled.copiedBuffer(CharBuffer.wrap(recoveryKey.chars()), StandardCharsets.UTF_8);
+        BLS12381.pbkdf2(mnemonicUtf8, mnemonicUtf8.readableBytes(), "mnemonic", false, mnemKeyBuf, 32);
+        mnemonicUtf8.setZero(0, mnemonicUtf8.readableBytes());
         var mnemKey = ByteBufUtil.getBytes(mnemKeyBuf);
 
         assertEquals(60, override.pass().raw().length);
