@@ -40,7 +40,7 @@ public final class ServerPublicKey {
         this.y = g.mul(sk.y);
     }
 
-    ServerPublicKey(ByteBuf input) throws GeneralSecurityException {
+    ServerPublicKey(ByteBuf input) {
         this.v = BLS12381.keyValidate(input);
         this.w = BLS12381.keyValidate(input);
         this.x = BLS12381.keyValidate(input);

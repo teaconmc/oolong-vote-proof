@@ -7,6 +7,7 @@ import com.google.common.io.BaseEncoding;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.nio.CharBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
@@ -88,8 +89,8 @@ public final class ShortMnemonic {
         this.mnemonicChars = Arrays.copyOf(chars, chars.length);
     }
 
-    public char[] chars() {
-        return this.mnemonicChars.clone();
+    public CharBuffer chars() {
+        return CharBuffer.wrap(this.mnemonicChars).asReadOnlyBuffer();
     }
 
     private static final List<String> WORDS;

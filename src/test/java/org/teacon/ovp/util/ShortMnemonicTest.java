@@ -35,7 +35,7 @@ class ShortMnemonicTest {
             var rng = (RandomGenerator) entropy::readLongLE;
             var mnemonic = new ShortMnemonic(rng);
             assertEquals(0, entropy.readableBytes());
-            assertEquals(vector.mnemonic, new String(mnemonic.chars()));
+            assertEquals(vector.mnemonic, mnemonic.chars().toString());
             for (var outputLength : new int[]{64, 128, 256}) {
                 var mnemonicUtf8 = Unpooled.copiedBuffer(CharBuffer.wrap(mnemonic.chars()), StandardCharsets.UTF_8);
                 BLS12381.pbkdf2(mnemonicUtf8, mnemonicUtf8.readableBytes(), "mnemonicTREZOR", false, out.clear(), outputLength);

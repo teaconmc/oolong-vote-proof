@@ -1,11 +1,13 @@
 package org.teacon.ovp.util;
 
+import com.google.common.hash.HashCode;
 import com.google.common.hash.Hashing;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
 import org.teacon.ovp.miracl.core.BLS12381.*;
 
+import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.text.Normalizer;
 import java.util.Arrays;
@@ -363,8 +365,9 @@ public final class BLS12381 {
     public static void pbkdf2(ByteBuf password, int passwordByteLength,
                               String salt, boolean xorWithExisting, ByteBuf output, int outputLength) {
         // password bytes consumed by this derivation
-        var passwordSlice = password.readSlice(passwordByteLength);
-        var hmac = Hashing.hmacSha512(ByteBufUtil.getBytes(passwordSlice));
+        var passwordBytes = ByteBufUtil.getBytes(password.readSlice(passwordByteLength));
+        var hmacAlg = "Hmac" + "SHA512";
+        var hmac = Hashing.hmacSha512(new SecretKeySpec(passwordBytes, hmacAlg));
         // salt input with trailing 32-bit block counter
         var blockInput = Unpooled.buffer(salt.length() + 4);
         blockInput.writeCharSequence(Normalizer.normalize(salt, Normalizer.Form.NFKD), StandardCharsets.UTF_8);
@@ -405,9 +408,63 @@ public final class BLS12381 {
             written += copyLength;
         }
         // clear intermediate secrets
-        passwordSlice.setZero(0, passwordSlice.readableBytes());
+        Unpooled.wrappedBuffer(passwordBytes).setZero(0, passwordByteLength);
         blockInput.setZero(0, blockInput.readableBytes());
         Arrays.fill(buffer, (byte) 0);
+    }
+
+    public static void encodeEnvelope(BIG secret, ByteBuf context, int contextLength,
+                                      ByteBuf nonce, ByteBuf seedKey, ByteBuf envelope) {
+        var index = envelope.writerIndex();
+        envelope.writeBytes(nonce.readSlice(32));
+        BLS12381.fieldToBytes(secret, envelope);
+        var seedKeyBytes = new byte[64];
+        seedKey.readBytes(seedKeyBytes);
+        for (var i = 32; i < 64; ++i) {
+            var target = index + i;
+            envelope.setByte(target, envelope.getByte(target) ^ seedKeyBytes[i]);
+        }
+        envelope.skipBytes(32);
+        var hmacAlg = "Hmac" + "SHA512";
+        // noinspection UnstableApiUsage
+        var hmac = Hashing.hmacSha512(new SecretKeySpec(seedKeyBytes, 0, 32, hmacAlg)).newHasher();
+        for (var buffer: envelope.slice(index, envelope.writerIndex()).nioBuffers()) {
+            // noinspection UnstableApiUsage
+            hmac.putBytes(buffer);
+        }
+        for (var buffer: context.readSlice(contextLength).nioBuffers()) {
+            // noinspection UnstableApiUsage
+            hmac.putBytes(buffer);
+        }
+        // noinspection UnstableApiUsage
+        envelope.writeBytes(hmac.hash().asBytes());
+    }
+
+    public static BIG decodeEnvelope(ByteBuf envelope, ByteBuf context, int contextLength, ByteBuf seedKey) {
+        var index = envelope.readerIndex();
+        var seedKeyBytes = new byte[64];
+        seedKey.readBytes(seedKeyBytes);
+        var hmacAlg = "Hmac" + "SHA512";
+        // noinspection UnstableApiUsage
+        var hmac = Hashing.hmacSha512(new SecretKeySpec(seedKeyBytes, 0, 32, hmacAlg)).newHasher();
+        for (var buffer: envelope.readSlice(64).nioBuffers()) {
+            // noinspection UnstableApiUsage
+            hmac.putBytes(buffer);
+        }
+        for (var buffer: context.readSlice(contextLength).nioBuffers()) {
+            // noinspection UnstableApiUsage
+            hmac.putBytes(buffer);
+        }
+        var expectedHmac = HashCode.fromBytes(ByteBufUtil.getBytes(envelope.readSlice(64)));
+        // noinspection UnstableApiUsage
+        if (!hmac.hash().equals(expectedHmac)) {
+            throw new IllegalArgumentException("the seed key and the ctx do not match the envelope");
+        }
+        for (var i = 32; i < 64; ++i) {
+            var source = index + i;
+            seedKeyBytes[i] ^= envelope.getByte(source);
+        }
+        return bytesToField(Unpooled.wrappedBuffer(seedKeyBytes, 32, 32));
     }
 
     private BLS12381() {

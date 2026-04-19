@@ -2,6 +2,7 @@ package org.teacon.ovp.payload;
 
 import io.netty.buffer.Unpooled;
 import org.teacon.ovp.miracl.core.BLS12381.BIG;
+import org.teacon.ovp.miracl.core.BLS12381.ECP;
 import org.teacon.ovp.util.BLS12381;
 
 import java.util.random.RandomGenerator;
@@ -9,8 +10,9 @@ import java.util.random.RandomGenerator;
 public final class VoteChallenges {
     static final RandomGenerator RANDOM = RandomGenerator.of("SecureRandom");
 
-    public static boolean validate(ServerPublicKey serverKey, ClientPRFRequest request, ServerPRFAbsent evaluate) {
-        var pair = BLS12381.pairingWithGeneratorNegative(request.m, serverKey.v, evaluate.n);
+    public static boolean validate(VoteClientContext context, ServerPRFAbsent evaluate) {
+        var m = context.passwordHash.mul(context.randomScalar);
+        var pair = BLS12381.pairingWithGeneratorNegative(m, context.serverKey.v, evaluate.n);
         return pair.isunity();
     }
 

@@ -8,10 +8,6 @@ import java.security.GeneralSecurityException;
 import java.security.SignatureException;
 
 public final class ClientPRFRequest {
-    public static ClientPRFRequest from(ClientPRFSession session) {
-        return new ClientPRFRequest(session);
-    }
-
     public static ClientPRFRequest load(ByteBuf input) throws GeneralSecurityException {
         try {
             return new ClientPRFRequest(input);
@@ -26,8 +22,8 @@ public final class ClientPRFRequest {
 
     final ECP m;
 
-    ClientPRFRequest(ClientPRFSession session) {
-        this.m = session.pPass.mul(session.r);
+    ClientPRFRequest(VoteClientContext ctx) {
+        this.m = ctx.passwordHash.mul(ctx.randomScalar);
     }
 
     ClientPRFRequest(ByteBuf input) {
