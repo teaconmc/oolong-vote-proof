@@ -180,7 +180,7 @@ public final class VoteClientContext {
             var seedInput = output.slice(offset + 64, 32).writerIndex(0);
             BLS12381.fieldToBytes(seedHash, seedInput);
             var seedKey = output.slice(offset, 64).writerIndex(0);
-            BLS12381.pbkdf2(seedInput, 32, "password", false, seedKey, 64);
+            BLS12381.pbkdf2(seedInput, 32, "password", seedKey, 64);
         } finally {
             output.setZero(offset + 64, bufferCapacity - 64);
             output.writerIndex(offset + 64);
@@ -195,7 +195,7 @@ public final class VoteClientContext {
             var seedInput = output.slice(offset + 64, chars.remaining()).writerIndex(0);
             ByteBufUtil.writeAscii(seedInput, chars);
             var seedKey = output.slice(offset, 64).writerIndex(0);
-            BLS12381.pbkdf2(seedInput, chars.remaining(), "mnemonic", false, seedKey, 64);
+            BLS12381.pbkdf2(seedInput, chars.remaining(), "mnemonic", seedKey, 64);
         } finally {
             output.setZero(offset + 64, bufferCapacity - 64);
             output.writerIndex(offset + 64);

@@ -363,7 +363,7 @@ public final class BLS12381 {
     }
 
     public static void pbkdf2(ByteBuf password, int passwordByteLength,
-                              String salt, boolean xorWithExisting, ByteBuf output, int outputLength) {
+                              String salt, ByteBuf output, int outputLength) {
         // password bytes consumed by this derivation
         var passwordBytes = ByteBufUtil.getBytes(password.readSlice(passwordByteLength));
         var hmacAlg = "Hmac" + "SHA512";
@@ -373,7 +373,6 @@ public final class BLS12381 {
         blockInput.writeCharSequence(Normalizer.normalize(salt, Normalizer.Form.NFKD), StandardCharsets.UTF_8);
         blockInput.markWriterIndex().writeZero(4);
         // output bookkeeping
-        var baseWriter = output.writerIndex();
         var blocks = (outputLength + 63) / 64;
         var written = 0;
         // workspace: [0..63]=accumulator, [64..127]=latest U_j
@@ -392,19 +391,7 @@ public final class BLS12381 {
             }
             // last block may be shorter
             var copyLength = Math.min(64, outputLength - written);
-            var targetStart = baseWriter + written;
-            output.ensureWritable(copyLength);
-            if (xorWithExisting) {
-                // in-place xor over target range
-                for (var k = 0; k < copyLength; ++k) {
-                    var target = targetStart + k;
-                    output.setByte(target, buffer[k] ^ output.getByte(target));
-                }
-                output.writerIndex(baseWriter + written);
-            } else {
-                // override the output
-                output.writeBytes(buffer, 0, copyLength);
-            }
+            output.writeBytes(buffer, 0, copyLength);
             written += copyLength;
         }
         // clear intermediate secrets
