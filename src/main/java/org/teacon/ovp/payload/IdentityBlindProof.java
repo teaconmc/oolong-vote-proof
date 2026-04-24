@@ -34,7 +34,7 @@ public final class IdentityBlindProof {
         return this.work;
     }
 
-    public DerivedIdentifier id() {
+    public IdentityDerivation id() {
         return this.id;
     }
 
@@ -59,7 +59,7 @@ public final class IdentityBlindProof {
     }
 
     final UUID work;
-    final DerivedIdentifier id;
+    final IdentityDerivation id;
     final VoteInformation info;
     final IdentitySignature signature;
     final BIG d;
@@ -70,7 +70,7 @@ public final class IdentityBlindProof {
                        UUID work, VoteInformation info, IdentitySignature signature, RandomGenerator rng) {
         // basic info
         this.work = work;
-        this.id = new DerivedIdentifier(work, clientSecret);
+        this.id = new IdentityDerivation(work, clientSecret);
         this.info = info;
         // blind signature
         this.signature = new IdentitySignature(signature, rng);
@@ -107,7 +107,7 @@ public final class IdentityBlindProof {
         var workIndex = input.readerIndex();
         this.work = new UUID(input.readLong(), input.readLong());
         // id
-        this.id = new DerivedIdentifier(input);
+        this.id = new IdentityDerivation(input);
         // info
         var infoLevelMap = new TreeMap<TagReference, VoteInformation.Level>();
         var magic = input.readShort();

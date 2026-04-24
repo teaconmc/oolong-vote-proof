@@ -13,14 +13,14 @@ import java.security.GeneralSecurityException;
 import java.security.SignatureException;
 import java.util.UUID;
 
-public final class DerivedIdentifier {
-    public static DerivedIdentifier from(UUID work, ClientSecretKey secretKey) {
-        return new DerivedIdentifier(work, secretKey);
+public final class IdentityDerivation {
+    public static IdentityDerivation from(UUID work, ClientSecretKey secretKey) {
+        return new IdentityDerivation(work, secretKey);
     }
 
-    public static DerivedIdentifier load(ByteBuf input) throws GeneralSecurityException {
+    public static IdentityDerivation load(ByteBuf input) throws GeneralSecurityException {
         try {
-            return new DerivedIdentifier(input);
+            return new IdentityDerivation(input);
         } catch (RuntimeException e) {
             throw new SignatureException("invalid server signature", e);
         }
@@ -38,14 +38,14 @@ public final class DerivedIdentifier {
 
     final ECP id;
 
-    DerivedIdentifier(UUID work, ClientSecretKey secretKey) {
+    IdentityDerivation(UUID work, ClientSecretKey secretKey) {
         var workLength = 128 / Byte.SIZE;
         var buf = Unpooled.buffer(workLength);
         buf.writeLong(work.getMostSignificantBits()).writeLong(work.getLeastSignificantBits());
         this.id = BLS12381.hashToPoint(buf, workLength).mul(secretKey.s);
     }
 
-    DerivedIdentifier(ByteBuf input) {
+    IdentityDerivation(ByteBuf input) {
         this.id = BLS12381.signatureToPoint(input);
     }
 }

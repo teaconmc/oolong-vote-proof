@@ -8,7 +8,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-class DerivedIdentifierTest {
+class IdentityDerivationTest {
     private static final UUID WORK = UUID.fromString("89abcdef-0123-4567-89ab-cdef01234567");
     private static final String CLIENT_SECRET_HEX = "15c026745a89f94dc78abebf65579b292c8c0924b2603c0736cfba6d28a47a2f";
     private static final String EXPECTED_DUMP_HEX = "ad400d032aefad184d33f14f8debabf5bfe330cd0392f182efe74c81d1be2e65" +
@@ -27,11 +27,11 @@ class DerivedIdentifierTest {
             "24f3607e0b182bdbfc412c2a6d96fecfff28085fd76fae8f";
 
     @Test
-    public void derivedIdentifier_dump_and_index_match_vectors_and_roundTrip_from_dump_bytes() {
+    public void identityDerivation_dump_and_index_match_vectors_and_roundTrip_from_dump_bytes() {
         var clientSkBytes = ByteBufUtil.decodeHexDump(CLIENT_SECRET_HEX);
         var clientSk = assertDoesNotThrow(() -> new ClientSecretKey(Unpooled.wrappedBuffer(clientSkBytes)));
 
-        var derived1 = new DerivedIdentifier(WORK, clientSk);
+        var derived1 = new IdentityDerivation(WORK, clientSk);
 
         var dump1 = Unpooled.buffer(48);
         derived1.dump(dump1);
@@ -44,7 +44,7 @@ class DerivedIdentifierTest {
 
         var dumpBytes = ByteBufUtil.decodeHexDump(EXPECTED_DUMP_HEX);
         var in = Unpooled.wrappedBuffer(dumpBytes);
-        var derived2 = assertDoesNotThrow(() -> new DerivedIdentifier(in));
+        var derived2 = assertDoesNotThrow(() -> new IdentityDerivation(in));
         assertEquals(0, in.readableBytes());
 
         var dump2 = Unpooled.buffer(48);
@@ -54,8 +54,8 @@ class DerivedIdentifierTest {
     }
 
     @Test
-    public void derivedIdentifier_constructor_rejects_invalid_signature_bytes() {
+    public void identityDerivation_constructor_rejects_invalid_signature_bytes() {
         var bad = Unpooled.buffer(48).writeZero(48);
-        assertThrows(IllegalArgumentException.class, () -> new DerivedIdentifier(bad));
+        assertThrows(IllegalArgumentException.class, () -> new IdentityDerivation(bad));
     }
 }
