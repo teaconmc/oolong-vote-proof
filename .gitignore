@@ -19,3 +19,17 @@ out
 
 # vscode
 .vscode
+
+# agents
+.codex
+.codex/
+.aider*
+.aider/
+.claude/
+.claude-code/
+.cursor/
+.roo/
+.continue/
+.llm/
+.llm-cache/
+.openai/
