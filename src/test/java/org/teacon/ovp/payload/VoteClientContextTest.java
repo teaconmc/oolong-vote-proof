@@ -5,7 +5,6 @@ import io.netty.buffer.Unpooled;
 import org.junit.jupiter.api.Test;
 import org.teacon.ovp.util.ShortMnemonic;
 
-import java.io.IOException;
 import java.util.Objects;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -109,7 +108,7 @@ class VoteClientContextTest {
     }
 
     @Test
-    void section2_password_login_recovers_secret_from_epsilon_by_dump_vectors() throws Exception {
+    void section2_password_login_recovers_secret_from_epsilon_by_dump_vectors() {
         var serverPk = new ServerPublicKey(Unpooled.wrappedBuffer(ByteBufUtil.decodeHexDump(SERVER_PUBLIC_HEX)));
 
         var rngSource = "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" +
@@ -121,7 +120,7 @@ class VoteClientContextTest {
         var rngBytes = Unpooled.wrappedBuffer(ByteBufUtil.decodeHexDump(rngSource));
         var ctx = new VoteClientContext(serverPk, rngBytes::readLongLE);
 
-        assertEquals(ctx, ctx.readPassword(PASSWORD.toCharArray()));
+        assertEquals(ctx, assertDoesNotThrow(() -> ctx.readPassword(PASSWORD.toCharArray())));
 
         var loginReq = ctx.makePRFRequest();
         var loginReqDump = Unpooled.buffer(48);
@@ -130,7 +129,7 @@ class VoteClientContextTest {
         assertEquals(HANDSHAKING_2_HEX, ByteBufUtil.hexDump(loginReqDump));
 
         var present = new ServerPRFPresent(Unpooled.wrappedBuffer(ByteBufUtil.decodeHexDump(SIGN_RESPONSE_HEX)));
-        assertEquals(ctx, ctx.readSecretKeyByPassword(present));
+        assertEquals(ctx, assertDoesNotThrow(() -> ctx.readSecretKeyByPassword(present)));
 
         var sk = ctx.makeSecretKey();
         var skDump = Unpooled.buffer(32);
@@ -140,7 +139,7 @@ class VoteClientContextTest {
     }
 
     @Test
-    void section2_mnemonic_recovery_recovers_secret_from_epsilon_by_readSecretKeyByMnemonic() throws Exception {
+    void section2_mnemonic_recovery_recovers_secret_from_epsilon_by_readSecretKeyByMnemonic() {
         var serverPk = new ServerPublicKey(Unpooled.wrappedBuffer(ByteBufUtil.decodeHexDump(SERVER_PUBLIC_HEX)));
         var present = new ServerPRFPresent(Unpooled.wrappedBuffer(ByteBufUtil.decodeHexDump(MNEM_RESPONSE_HEX)));
         var mnemonic = new ShortMnemonic(MNEMONIC.toCharArray());
@@ -153,7 +152,7 @@ class VoteClientContextTest {
         var ctx = new VoteClientContext(serverPk, rngBytes::readLongLE);
 
         assertTrue(ctx.holdEmptyPassword());
-        assertEquals(ctx, ctx.readSecretKeyByMnemonic(present, mnemonic));
+        assertEquals(ctx, assertDoesNotThrow(() -> ctx.readSecretKeyByMnemonic(present, mnemonic)));
 
         var sk = ctx.makeSecretKey();
         var skDump = Unpooled.buffer(32);

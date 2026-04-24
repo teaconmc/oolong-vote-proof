@@ -23,7 +23,7 @@ class IdentitySignatureTest {
             "f5cbd04582922eb34ce63ef4a5efa5a51e2caeb2e94a5bc2d907f374";
 
     @Test
-    public void identitySignature_can_be_constructed_and_verified_with_voteChallenges() throws Exception {
+    public void identitySignature_can_be_constructed_and_verified_with_voteChallenges() {
         var clientSk = new ClientSecretKey(Unpooled.wrappedBuffer(ByteBufUtil.decodeHexDump(CLIENT_SECRET_HEX)));
         var serverSk = new ServerSecretKey(Unpooled.wrappedBuffer(ByteBufUtil.decodeHexDump(SERVER_SECRET_HEX)));
         var serverPk = new ServerPublicKey(serverSk);
@@ -47,7 +47,7 @@ class IdentitySignatureTest {
     }
 
     @Test
-    public void voteChallenges_validate_rejects_tampered_identity_signature() throws Exception {
+    public void voteChallenges_validate_rejects_tampered_identity_signature() {
         var clientSk = new ClientSecretKey(Unpooled.wrappedBuffer(ByteBufUtil.decodeHexDump(CLIENT_SECRET_HEX)));
         var serverSk = new ServerSecretKey(Unpooled.wrappedBuffer(ByteBufUtil.decodeHexDump(SERVER_SECRET_HEX)));
         var serverPk = new ServerPublicKey(serverSk);

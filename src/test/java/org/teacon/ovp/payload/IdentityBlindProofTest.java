@@ -40,7 +40,7 @@ class IdentityBlindProofTest {
             new TagReference("b", "x"), VoteInformation.Level.ONE), List.of("first", "second"));
 
     @Test
-    public void from_work_id_info_accessors_expose_expected_values() throws Exception {
+    public void from_work_id_info_accessors_expose_expected_values() {
         var clientSk = new ClientSecretKey(Unpooled.wrappedBuffer(ByteBufUtil.decodeHexDump(CLIENT_SECRET_HEX)));
         var serverSk = new ServerSecretKey(Unpooled.wrappedBuffer(ByteBufUtil.decodeHexDump(SERVER_SECRET_HEX)));
         var serverPk = new ServerPublicKey(serverSk);
@@ -58,7 +58,7 @@ class IdentityBlindProofTest {
     }
 
     @Test
-    public void load_accessors_and_dump_roundTrip_match_vector() throws Exception {
+    public void load_accessors_and_dump_roundTrip_match_vector() {
         var loaded = new IdentityBlindProof(Unpooled.wrappedBuffer(ByteBufUtil.decodeHexDump(BLINDED_PROOF_HEX)));
 
         assertEquals(WORK, loaded.work());
@@ -81,7 +81,7 @@ class IdentityBlindProofTest {
     }
 
     @Test
-    public void identityBlindProof_can_be_constructed_loaded_and_verified_with_voteChallenges() throws Exception {
+    public void identityBlindProof_can_be_constructed_loaded_and_verified_with_voteChallenges() {
         var clientSk = new ClientSecretKey(Unpooled.wrappedBuffer(ByteBufUtil.decodeHexDump(CLIENT_SECRET_HEX)));
         var serverSk = new ServerSecretKey(Unpooled.wrappedBuffer(ByteBufUtil.decodeHexDump(SERVER_SECRET_HEX)));
         var serverPk = new ServerPublicKey(serverSk);
@@ -111,7 +111,7 @@ class IdentityBlindProofTest {
     }
 
     @Test
-    public void voteChallenges_validate_rejects_tampered_identity_blind_proof() throws Exception {
+    public void voteChallenges_validate_rejects_tampered_identity_blind_proof() {
         var serverSk = new ServerSecretKey(Unpooled.wrappedBuffer(ByteBufUtil.decodeHexDump(SERVER_SECRET_HEX)));
         var serverPk = new ServerPublicKey(serverSk);
 
