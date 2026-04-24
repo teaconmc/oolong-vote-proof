@@ -2,7 +2,6 @@ package org.teacon.ovp.payload;
 
 import io.netty.buffer.Unpooled;
 import org.teacon.ovp.miracl.core.BLS12381.BIG;
-import org.teacon.ovp.miracl.core.BLS12381.ECP;
 import org.teacon.ovp.util.BLS12381;
 
 import java.util.random.RandomGenerator;
@@ -16,12 +15,15 @@ public final class VoteChallenges {
         return pair.isunity();
     }
 
-    public static boolean validate(ClientSecretKey clientKey, ServerPublicKey serverKey, IdentitySignature signature) {
-        var point = serverKey.w.mul(signature.rolesHash);
-        point.add(serverKey.x);
-        point.add(serverKey.y.mul(clientKey.s));
-        var pair = BLS12381.pairingWithGeneratorNegative(signature.a, point, signature.b);
-        return pair.isunity();
+    public static boolean validate(VoteClientContext context, IdentitySignature signature) {
+        if (context.secretKeyOrZero.nbits() > 0) {
+            var point = context.serverKey.w.mul(signature.rolesHash);
+            point.add(context.serverKey.x);
+            point.add(context.serverKey.y.mul(context.secretKeyOrZero));
+            var pair = BLS12381.pairingWithGeneratorNegative(signature.a, point, signature.b);
+            return pair.isunity();
+        }
+        return false;
     }
 
     public static boolean validate(ServerPublicKey serverKey, IdentityBlindProof proof) {

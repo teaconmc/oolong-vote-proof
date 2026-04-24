@@ -24,27 +24,26 @@ class IdentitySignatureTest {
 
     @Test
     public void identitySignature_can_be_constructed_and_verified_with_voteChallenges() throws Exception {
-        var clientSkBytes = ByteBufUtil.decodeHexDump(CLIENT_SECRET_HEX);
-        var serverSkBytes = ByteBufUtil.decodeHexDump(SERVER_SECRET_HEX);
-        var clientSk = new ClientSecretKey(Unpooled.wrappedBuffer(clientSkBytes));
-        var serverSk = new ServerSecretKey(Unpooled.wrappedBuffer(serverSkBytes));
+        var clientSk = new ClientSecretKey(Unpooled.wrappedBuffer(ByteBufUtil.decodeHexDump(CLIENT_SECRET_HEX)));
+        var serverSk = new ServerSecretKey(Unpooled.wrappedBuffer(ByteBufUtil.decodeHexDump(SERVER_SECRET_HEX)));
         var serverPk = new ServerPublicKey(serverSk);
+        var ctx = new VoteClientContext(serverPk, RandomGenerator.of("SecureRandom")).readSecretKey(clientSk);
+
         var commit = new ClientPointCommit(clientSk);
         var role = List.of("a:x", "a:x/y.z", "f:b", "f:b/very.long_segment-123", "f:b2",
                 "long.namespace:a", "long.namespace:z", "z:a", "z:a_really/long/path.segment", "zz:0");
 
-        var entropyBytesHex = "527b2d3a3424fef92ac5ca8b685c2bc52747e44d31042c95d215510043a929ff96832fa3cb412d1c2cd58a" +
-                "56882d0d26daa887eb4f29b189d1146ed694a3cffbe89b15a0606616d3a216381230ec3add5d3633ce808776ed235aff95f7" +
-                "bc0aff";
-        var entropyBytes = Unpooled.wrappedBuffer(ByteBufUtil.decodeHexDump(entropyBytesHex));
-        var entropy = (RandomGenerator) entropyBytes::readLongLE;
-        var signature = new IdentitySignature(serverSk, commit, role.stream().map(TagReference::new).toList(), entropy);
+        var rngSource = "527b2d3a3424fef92ac5ca8b685c2bc52747e44d31042c95d215510043a929ff96832fa3cb412d1c2cd58a56882d" +
+                "0d26daa887eb4f29b189d1146ed694a3cffbe89b15a0606616d3a216381230ec3add5d3633ce808776ed235aff95f7bc0aff";
+        var rngBytes = Unpooled.wrappedBuffer(ByteBufUtil.decodeHexDump(rngSource));
+        var rng = (RandomGenerator) rngBytes::readLongLE;
+        var signature = new IdentitySignature(serverSk, commit, role.stream().map(TagReference::new).toList(), rng);
 
         var sigOnlyDump = Unpooled.buffer(216);
         signature.dump(sigOnlyDump);
         assertEquals(IDENTITY_SIGN_HEX, ByteBufUtil.hexDump(sigOnlyDump));
-        assertEquals(0, entropyBytes.readableBytes());
-        assertTrue(VoteChallenges.validate(clientSk, serverPk, signature));
+        assertEquals(0, rngBytes.readableBytes());
+        assertTrue(VoteChallenges.validate(ctx, signature));
     }
 
     @Test
@@ -52,10 +51,11 @@ class IdentitySignatureTest {
         var clientSk = new ClientSecretKey(Unpooled.wrappedBuffer(ByteBufUtil.decodeHexDump(CLIENT_SECRET_HEX)));
         var serverSk = new ServerSecretKey(Unpooled.wrappedBuffer(ByteBufUtil.decodeHexDump(SERVER_SECRET_HEX)));
         var serverPk = new ServerPublicKey(serverSk);
+        var ctx = new VoteClientContext(serverPk, RandomGenerator.of("SecureRandom")).readSecretKey(clientSk);
 
         var encoded = Unpooled.wrappedBuffer(ByteBufUtil.decodeHexDump(IDENTITY_SIGN_HEX));
         var signature = new IdentitySignature(encoded);
-        assertTrue(VoteChallenges.validate(clientSk, serverPk, signature));
+        assertTrue(VoteChallenges.validate(ctx, signature));
 
         var badEncoded = Unpooled.buffer(97);
         BLS12381.stringToBytes(false, "", badEncoded);
@@ -63,6 +63,6 @@ class IdentitySignatureTest {
         var badB = signature.a.mul(serverSk.w);
         BLS12381.pointToSignature(badB, badEncoded);
         var badSignature = new IdentitySignature(badEncoded);
-        assertFalse(VoteChallenges.validate(clientSk, serverPk, badSignature));
+        assertFalse(VoteChallenges.validate(ctx, badSignature));
     }
 }

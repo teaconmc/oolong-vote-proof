@@ -23,7 +23,7 @@ public final class ClientSecretKey {
     final BIG s;
 
     ClientSecretKey(VoteClientContext ctx) {
-        this.s = new BIG(ctx.secretKey.nbits() == 0 ? BLS12381.randomToField(ctx.rng) : ctx.secretKey);
+        this.s = new BIG(ctx.secretKeyOrZero.nbits() == 0 ? BLS12381.randomToField(ctx.rng) : ctx.secretKeyOrZero);
     }
 
     ClientSecretKey(ByteBuf input) {
