@@ -16,14 +16,11 @@ public final class VoteChallenges {
     }
 
     public static boolean validate(VoteClientContext context, IdentitySignature signature) {
-        if (context.secretKeyOrZero.nbits() > 0) {
-            var point = context.serverKey.w.mul(signature.rolesHash);
-            point.add(context.serverKey.x);
-            point.add(context.serverKey.y.mul(context.secretKeyOrZero));
-            var pair = BLS12381.pairingWithGeneratorNegative(signature.a, point, signature.b);
-            return pair.isunity();
-        }
-        return false;
+        var point = context.serverKey.w.mul(signature.rolesHash);
+        point.add(context.serverKey.x);
+        point.add(context.serverKey.y.mul(context.secretKey));
+        var pair = BLS12381.pairingWithGeneratorNegative(signature.a, point, signature.b);
+        return pair.isunity();
     }
 
     public static boolean validate(ServerPublicKey serverKey, IdentityBlindProof proof) {

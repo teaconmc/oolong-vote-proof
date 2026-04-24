@@ -28,7 +28,7 @@ public final class ServerSecretKey {
     final BIG x;
     final BIG y;
 
-    ServerSecretKey(ByteBuf input) throws GeneralSecurityException {
+    ServerSecretKey(ByteBuf input) {
         this.v = BLS12381.secretKeyToField(input);
         this.w = BLS12381.secretKeyToField(input);
         this.x = BLS12381.secretKeyToField(input);

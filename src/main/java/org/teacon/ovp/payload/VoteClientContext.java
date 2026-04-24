@@ -1,6 +1,5 @@
 package org.teacon.ovp.payload;
 
-import com.google.common.base.Preconditions;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
@@ -29,9 +28,8 @@ public final class VoteClientContext {
     final ECP passwordHash;
     final BIG randomScalar;
 
-    // late initialized
-    final ECP passwordPRFOrZero;
-    final BIG secretKeyOrZero;
+    // secretKey
+    final BIG secretKey;
 
     VoteClientContext(ServerPublicKey key, RandomGenerator generator) {
         // initialize immutable context and shared buffers
@@ -43,8 +41,7 @@ public final class VoteClientContext {
         this.password = Unpooled.buffer();
         this.passwordHash = BLS12381.hashToPoint(this.password, 0);
         this.randomScalar = BLS12381.randomToField(generator);
-        this.passwordPRFOrZero = ECP.generator().mul(new BIG(0));
-        this.secretKeyOrZero = new BIG(0);
+        this.secretKey = BLS12381.randomToField(generator);
     }
 
     public VoteClientContext readPassword(char[] password) throws IOException {
@@ -66,7 +63,6 @@ public final class VoteClientContext {
         ByteBufUtil.writeAscii(this.password, wrapped);
         this.passwordHash.copy(BLS12381.hashToPoint(this.password.slice(0, bytes), bytes));
         this.randomScalar.copy(BLS12381.randomToField(this.rng));
-        this.passwordPRFOrZero.mul(new BIG(0));
         return this;
     }
 
@@ -75,35 +71,25 @@ public final class VoteClientContext {
         this.password.setZero(0, this.password.capacity()).writerIndex(0).capacity(0);
         this.passwordHash.copy(BLS12381.hashToPoint(this.password, 0));
         this.randomScalar.copy(BLS12381.randomToField(this.rng));
-        this.passwordPRFOrZero.mul(new BIG(0));
         // commit imported secret key
-        this.secretKeyOrZero.copy(key.s);
-        return this;
-    }
-
-    public VoteClientContext readPasswordPRF(ServerPRFAbsent resp) throws IOException {
-        // verify server challenge response matches current request context
-        var validated = VoteChallenges.validate(this, resp);
-        if (!validated) {
-            throw new IOException("mismatched server response and client request");
-        }
-        // unblind server PRF output and cache it
-        this.passwordPRFOrZero.copy(resp.n.mul(BLS12381.fieldInverse(this.randomScalar)));
+        this.secretKey.copy(key.s);
         return this;
     }
 
     public VoteClientContext readSecretKeyByPassword(ServerPRFPresent resp) throws IOException {
         try {
-            // ensure PRF in response matches previously established password PRF
-            var diff = resp.n.mul(BLS12381.fieldInverse(this.randomScalar));
-            diff.sub(this.passwordPRFOrZero);
-            Preconditions.checkArgument(diff.is_infinity());
+            // verify server challenge response matches current request context
+            var absent = new ServerPRFAbsent(resp);
+            var validated = VoteChallenges.validate(this, absent);
+            if (!validated) {
+                throw new IOException("mismatched server response and client request");
+            }
             // derive password seed key and decrypt password envelope
             var seedKey = Unpooled.buffer(0);
-            this.hashToPasswordSeed(seedKey);
+            this.hashToPasswordSeed(absent, seedKey);
             var envelope = Unpooled.wrappedBuffer(resp.ePass);
             var ctx = this.serverKeyBytes.slice();
-            this.secretKeyOrZero.copy(BLS12381.decodeEnvelope(envelope, ctx, ctx.readableBytes(), seedKey));
+            this.secretKey.copy(BLS12381.decodeEnvelope(envelope, ctx, ctx.readableBytes(), seedKey));
             return this;
         } catch (RuntimeException e) {
             throw new IOException("malformed resp format or invalid password", e);
@@ -112,31 +98,31 @@ public final class VoteClientContext {
 
     public VoteClientContext readSecretKeyByMnemonic(ServerPRFPresent resp, ShortMnemonic mnemonic) throws IOException {
         try {
+            // verify server challenge response matches current request context
+            var validated = VoteChallenges.validate(this, new ServerPRFAbsent(resp));
+            if (!validated) {
+                throw new IOException("mismatched server response and client request");
+            }
             // derive mnemonic seed key and decrypt mnemonic envelope
             var seedKey = Unpooled.buffer(0);
             this.hashToMnemonicSeed(mnemonic, seedKey);
             var envelope = Unpooled.wrappedBuffer(resp.eMnem);
             var ctx = this.serverKeyBytes.slice();
-            this.secretKeyOrZero.copy(BLS12381.decodeEnvelope(envelope, ctx, ctx.readableBytes(), seedKey));
+            this.secretKey.copy(BLS12381.decodeEnvelope(envelope, ctx, ctx.readableBytes(), seedKey));
             return this;
         } catch (RuntimeException e) {
             throw new IOException("malformed resp format or invalid mnemonic", e);
         }
     }
 
-    public VoteClientContext dropSecretKeyAndPassword() {
+    public VoteClientContext dropPasswordAndRotateSecretKey() {
         // wipe password and all password-derived state
         this.password.setZero(0, this.password.capacity()).writerIndex(0).capacity(0);
         this.passwordHash.copy(BLS12381.hashToPoint(this.password, 0));
         this.randomScalar.copy(BLS12381.randomToField(this.rng));
-        this.passwordPRFOrZero.mul(new BIG(0));
         // clear secret key material
-        this.secretKeyOrZero.zero();
+        this.secretKey.copy(BLS12381.randomToField(this.rng));
         return this;
-    }
-
-    public boolean holdEmptySecretKey() {
-        return this.secretKeyOrZero.nbits() == 0;
     }
 
     public boolean holdEmptyPassword() {
@@ -147,46 +133,44 @@ public final class VoteClientContext {
         return new ClientPRFRequest(this);
     }
 
-    public ClientPRFOverride makePRFOverride(Consumer<ShortMnemonic> mnemonicConsumer) throws IOException {
-        // point commit
-        var key = new ClientSecretKey(this);
-        this.secretKeyOrZero.copy(key.s);
+    public ClientPRFOverride makePRFOverride(ServerPRFAbsent resp, Consumer<ShortMnemonic> holder) throws IOException {
+        // verify server challenge response matches current request context
+        var validated = VoteChallenges.validate(this, resp);
+        if (!validated) {
+            throw new IOException("mismatched server response and client request");
+        }
         // prepare salt
         var saltBytes = new byte[32];
         this.rng.nextBytes(saltBytes);
         var salt = Unpooled.wrappedBuffer(saltBytes);
         // prepare mnemonic
         var mnemonic = new ShortMnemonic(this.rng);
-        mnemonicConsumer.accept(mnemonic);
+        holder.accept(mnemonic);
         // generate seed keys
         var seedKey = Unpooled.buffer(0);
         this.hashToMnemonicSeed(mnemonic, seedKey);
-        this.hashToPasswordSeed(seedKey);
+        this.hashToPasswordSeed(resp, seedKey);
         // write envelope bytes
+        var secret = this.secretKey;
         var envelopeBytes = new byte[224];
         var ctx = this.serverKeyBytes.slice();
         var eMnem = Unpooled.wrappedBuffer(envelopeBytes, 96, 128).writerIndex(0);
-        BLS12381.encodeEnvelope(key.s, ctx, ctx.readableBytes(), salt, seedKey, eMnem);
+        BLS12381.encodeEnvelope(secret, ctx, ctx.readableBytes(), salt, seedKey, eMnem);
         var ePass = Unpooled.wrappedBuffer(envelopeBytes, 0, 128).writerIndex(0);
-        BLS12381.encodeEnvelope(key.s, ctx.readerIndex(0), ctx.readableBytes(), salt.readerIndex(0), seedKey, ePass);
+        BLS12381.encodeEnvelope(secret, ctx.readerIndex(0), ctx.readableBytes(), salt.readerIndex(0), seedKey, ePass);
         // construct override
-        return new ClientPRFOverride(key, envelopeBytes);
+        return new ClientPRFOverride(new ClientSecretKey(this), envelopeBytes);
     }
 
     public ServerPublicKey makeServerKey() {
         return this.serverKey;
     }
 
-    public ClientSecretKey makeSecretKey() throws IOException {
-        // reject requests before secret key has been initialized
-        if (this.secretKeyOrZero.nbits() == 0) {
-            throw new IOException("uninitialized client secret key");
-        }
-        // return a detached secret key snapshot
+    public ClientSecretKey makeSecretKey() {
         return new ClientSecretKey(this);
     }
 
-    private void hashToPasswordSeed(ByteBuf output) throws IOException {
+    private void hashToPasswordSeed(ServerPRFAbsent resp, ByteBuf output) throws IOException {
         // reserve output space for seed key and transient hashing buffers
         var seedHashInputSize = this.password.writerIndex() + 48;
         var bufferCapacity = Math.max(seedHashInputSize, 64 + 32);
@@ -195,10 +179,7 @@ public final class VoteClientContext {
             // hash password bytes and password PRF point into a scalar
             var seedHashInput = output.slice(offset, seedHashInputSize).writerIndex(0);
             seedHashInput.writeBytes(this.password.slice());
-            if (this.passwordPRFOrZero.is_infinity()) {
-                throw new IOException("uninitialized password prf result");
-            }
-            BLS12381.pointToSignature(this.passwordPRFOrZero, seedHashInput);
+            BLS12381.pointToSignature(resp.n.mul(BLS12381.fieldInverse(this.randomScalar)), seedHashInput);
             var seedHash = BLS12381.hashToScalar(seedHashInput, seedHashInputSize);
             // run PBKDF2 over the scalar bytes to derive a 64-byte seed key
             var seedInput = output.slice(offset + 64, 32).writerIndex(0);
