@@ -29,7 +29,7 @@ class IdentitySignatureTest {
         var serverPk = new ServerPublicKey(serverSk);
         var ctx = new VoteClientContext(serverPk, RandomGenerator.of("SecureRandom")).readSecretKey(clientSk);
 
-        var commit = new ClientPointCommit(clientSk);
+        var commit = ctx.makePointCommit();
         var role = List.of("a:x", "a:x/y.z", "f:b", "f:b/very.long_segment-123", "f:b2",
                 "long.namespace:a", "long.namespace:z", "z:a", "z:a_really/long/path.segment", "zz:0");
 

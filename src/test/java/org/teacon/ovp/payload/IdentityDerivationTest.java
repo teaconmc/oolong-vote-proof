@@ -5,12 +5,16 @@ import io.netty.buffer.Unpooled;
 import org.junit.jupiter.api.Test;
 
 import java.util.UUID;
+import java.util.random.RandomGenerator;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class IdentityDerivationTest {
     private static final UUID WORK = UUID.fromString("89abcdef-0123-4567-89ab-cdef01234567");
     private static final String CLIENT_SECRET_HEX = "15c026745a89f94dc78abebf65579b292c8c0924b2603c0736cfba6d28a47a2f";
+    private static final String SERVER_SECRET_HEX = "267cc15949dcf8ef55f0a325b8f56e32d296b41251a7c94a9101b1ad41106199" +
+            "3410820adc72d75744970568546b5a7a5e2305b7b48a52aff2b43f275f58c37746ad2ad93622109df93a0666cdc5dd8c899077f4" +
+            "9f46f1fce99bd1520b3a41975771318129301ae63bbe78ae8628c99139b69e16153e92217ede3f00c2ec17c4";
     private static final String EXPECTED_DUMP_HEX = "ad400d032aefad184d33f14f8debabf5bfe330cd0392f182efe74c81d1be2e65" +
             "cf5a704258f290afd6c6367b4b96f8c1";
     private static final String INDEX_BE_DUMP_HEX = "1391159f182e3de1d969a57311f2da62580373fedf1069c317c2531f9ce6aa4c" +
@@ -30,8 +34,11 @@ class IdentityDerivationTest {
     public void identityDerivation_dump_and_index_match_vectors_and_roundTrip_from_dump_bytes() {
         var clientSkBytes = ByteBufUtil.decodeHexDump(CLIENT_SECRET_HEX);
         var clientSk = assertDoesNotThrow(() -> new ClientSecretKey(Unpooled.wrappedBuffer(clientSkBytes)));
+        var serverSk = new ServerSecretKey(Unpooled.wrappedBuffer(ByteBufUtil.decodeHexDump(SERVER_SECRET_HEX)));
+        var serverPk = new ServerPublicKey(serverSk);
+        var ctx = new VoteClientContext(serverPk, RandomGenerator.of("SecureRandom")).readSecretKey(clientSk);
 
-        var derived1 = new IdentityDerivation(WORK, clientSk);
+        var derived1 = ctx.makeIdentityDerivation(WORK);
 
         var dump1 = Unpooled.buffer(48);
         derived1.dump(dump1);

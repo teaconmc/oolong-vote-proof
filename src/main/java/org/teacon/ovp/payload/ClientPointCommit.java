@@ -8,10 +8,6 @@ import java.security.GeneralSecurityException;
 import java.security.SignatureException;
 
 public final class ClientPointCommit {
-    public static ClientPointCommit from(ClientSecretKey secretKey) {
-        return new ClientPointCommit(secretKey);
-    }
-
     public static ClientPointCommit load(ByteBuf input) throws GeneralSecurityException {
         try {
             return new ClientPointCommit(input);
@@ -26,8 +22,8 @@ public final class ClientPointCommit {
 
     final ECP s;
 
-    ClientPointCommit(ClientSecretKey secretKey) {
-        this.s = ECP.generator().mul(secretKey.s);
+    ClientPointCommit(VoteClientContext context) {
+        this.s = ECP.generator().mul(context.secretKey);
     }
 
     ClientPointCommit(ByteBuf input) {

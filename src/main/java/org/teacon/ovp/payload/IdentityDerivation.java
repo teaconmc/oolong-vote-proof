@@ -14,10 +14,6 @@ import java.security.SignatureException;
 import java.util.UUID;
 
 public final class IdentityDerivation {
-    public static IdentityDerivation from(UUID work, ClientSecretKey secretKey) {
-        return new IdentityDerivation(work, secretKey);
-    }
-
     public static IdentityDerivation load(ByteBuf input) throws GeneralSecurityException {
         try {
             return new IdentityDerivation(input);
@@ -38,11 +34,11 @@ public final class IdentityDerivation {
 
     final ECP id;
 
-    IdentityDerivation(UUID work, ClientSecretKey secretKey) {
+    IdentityDerivation(VoteClientContext context, UUID work) {
         var workLength = 128 / Byte.SIZE;
         var buf = Unpooled.buffer(workLength);
         buf.writeLong(work.getMostSignificantBits()).writeLong(work.getLeastSignificantBits());
-        this.id = BLS12381.hashToPoint(buf, workLength).mul(secretKey.s);
+        this.id = BLS12381.hashToPoint(buf, workLength).mul(context.secretKey);
     }
 
     IdentityDerivation(ByteBuf input) {

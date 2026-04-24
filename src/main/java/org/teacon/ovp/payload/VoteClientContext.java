@@ -7,9 +7,11 @@ import org.teacon.ovp.miracl.core.BLS12381.BIG;
 import org.teacon.ovp.miracl.core.BLS12381.ECP;
 import org.teacon.ovp.util.BLS12381;
 import org.teacon.ovp.util.ShortMnemonic;
+import org.teacon.ovp.util.VoteInformation;
 
 import java.io.IOException;
 import java.nio.CharBuffer;
+import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.random.RandomGenerator;
 
@@ -129,6 +131,14 @@ public final class VoteClientContext {
         return this.password.writerIndex() == 0;
     }
 
+    public ServerPublicKey makeServerKey() {
+        return this.serverKey;
+    }
+
+    public ClientSecretKey makeSecretKey() {
+        return new ClientSecretKey(this);
+    }
+
     public ClientPRFRequest makePRFRequest() {
         return new ClientPRFRequest(this);
     }
@@ -159,15 +169,23 @@ public final class VoteClientContext {
         var ePass = Unpooled.wrappedBuffer(envelopeBytes, 0, 128).writerIndex(0);
         BLS12381.encodeEnvelope(secret, ctx.readerIndex(0), ctx.readableBytes(), salt.readerIndex(0), seedKey, ePass);
         // construct override
-        return new ClientPRFOverride(new ClientSecretKey(this), envelopeBytes);
+        return new ClientPRFOverride(this, envelopeBytes);
     }
 
-    public ServerPublicKey makeServerKey() {
-        return this.serverKey;
+    public ClientPointCommit makePointCommit() {
+        return new ClientPointCommit(this);
     }
 
-    public ClientSecretKey makeSecretKey() {
-        return new ClientSecretKey(this);
+    public IdentityDerivation makeIdentityDerivation(UUID work) {
+        return new IdentityDerivation(this, work);
+    }
+
+    public IdentityBlindProof makeIdentityBlindProof(UUID work, VoteInformation info, IdentitySignature sig) {
+        return new IdentityBlindProof(this, work, info, sig, VoteChallenges.RANDOM);
+    }
+
+    public ClientRevocation makeRevocation() {
+        return new ClientRevocation(this);
     }
 
     private void hashToPasswordSeed(ServerPRFAbsent resp, ByteBuf output) throws IOException {

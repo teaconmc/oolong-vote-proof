@@ -8,10 +8,6 @@ import java.security.GeneralSecurityException;
 import java.security.InvalidKeyException;
 
 public final class ClientRevocation {
-    public static ClientRevocation from(ClientSecretKey secretKey) {
-        return new ClientRevocation(secretKey);
-    }
-
     public static ClientRevocation load(ByteBuf input) throws GeneralSecurityException {
         try {
             return new ClientRevocation(input);
@@ -26,8 +22,8 @@ public final class ClientRevocation {
 
     final ECP2 c;
 
-    ClientRevocation(ClientSecretKey secretKey) {
-        this.c = ECP2.generator().mul(secretKey.s);
+    ClientRevocation(VoteClientContext context) {
+        this.c = ECP2.generator().mul(context.secretKey);
     }
 
     ClientRevocation(ByteBuf input) {

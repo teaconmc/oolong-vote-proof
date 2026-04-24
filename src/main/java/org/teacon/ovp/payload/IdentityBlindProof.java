@@ -16,12 +16,6 @@ import java.util.UUID;
 import java.util.random.RandomGenerator;
 
 public final class IdentityBlindProof {
-
-    public static IdentityBlindProof from(ClientSecretKey clientSecret, ServerPublicKey serverPublic,
-                                          UUID work, VoteInformation info, IdentitySignature signature) {
-        return new IdentityBlindProof(clientSecret, serverPublic, work, info, signature, VoteChallenges.RANDOM);
-    }
-
     public static IdentityBlindProof load(ByteBuf input) throws GeneralSecurityException {
         try {
             return new IdentityBlindProof(input);
@@ -66,11 +60,11 @@ public final class IdentityBlindProof {
     final BIG c;
     final BIG z;
 
-    IdentityBlindProof(ClientSecretKey clientSecret, ServerPublicKey serverPublic,
-                       UUID work, VoteInformation info, IdentitySignature signature, RandomGenerator rng) {
+    IdentityBlindProof(VoteClientContext context, UUID work,
+                       VoteInformation info, IdentitySignature signature, RandomGenerator rng) {
         // basic info
         this.work = work;
-        this.id = new IdentityDerivation(work, clientSecret);
+        this.id = new IdentityDerivation(context, work);
         this.info = info;
         // blind signature
         this.signature = new IdentitySignature(signature, rng);
@@ -79,7 +73,7 @@ public final class IdentityBlindProof {
         var buf = Unpooled.buffer(256 + signature.rolesByteCount + 256);
         buf.writeLong(work.getMostSignificantBits()).writeLong(work.getLeastSignificantBits());
         var qPoint = BLS12381.hashToPoint(buf.slice(), 128 / Byte.SIZE).mul(r);
-        var rPairing = BLS12381.pairing(this.signature.a, serverPublic.y.mul(r));
+        var rPairing = BLS12381.pairing(this.signature.a, context.serverKey.y.mul(r));
         // role hash (scalar) and d (scalar)
         this.id.dump(buf);
         for (var entry : info.levels().entrySet()) {
@@ -93,13 +87,13 @@ public final class IdentityBlindProof {
         this.signature.dump(buf);
         this.d = BLS12381.hashToScalar(buf, buf.readableBytes());
         // c (scalar)
-        serverPublic.dump(buf.clear());
+        context.serverKey.dump(buf.clear());
         BLS12381.fieldToBytes(this.d, buf);
         BLS12381.pointToSignature(qPoint, buf);
         BLS12381.pairingToIndexBE(rPairing, buf);
         this.c = BLS12381.hashToScalar(buf, buf.readableBytes());
         // z (scalar)
-        this.z = BLS12381.fieldMultiplyAdd(this.c, clientSecret.s, r);
+        this.z = BLS12381.fieldMultiplyAdd(this.c, context.secretKey, r);
     }
 
     IdentityBlindProof(ByteBuf input) {

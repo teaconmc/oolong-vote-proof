@@ -44,17 +44,17 @@ class IdentityBlindProofTest {
         var clientSk = new ClientSecretKey(Unpooled.wrappedBuffer(ByteBufUtil.decodeHexDump(CLIENT_SECRET_HEX)));
         var serverSk = new ServerSecretKey(Unpooled.wrappedBuffer(ByteBufUtil.decodeHexDump(SERVER_SECRET_HEX)));
         var serverPk = new ServerPublicKey(serverSk);
+        var ctx = new VoteClientContext(serverPk, RandomGenerator.of("SecureRandom")).readSecretKey(clientSk);
         var sig = new IdentitySignature(Unpooled.wrappedBuffer(ByteBufUtil.decodeHexDump(IDENTITY_SIGN_HEX)));
-        var info = VOTE_INFO;
 
-        var proof = new IdentityBlindProof(clientSk, serverPk, WORK, info, sig, RandomGenerator.of("SecureRandom"));
+        var proof = ctx.makeIdentityBlindProof(WORK, VOTE_INFO, sig);
 
         assertEquals(WORK, proof.work());
         var idDump = Unpooled.buffer(48);
         proof.id().dump(idDump);
         assertEquals(ID_DERIVATION_HEX, ByteBufUtil.hexDump(idDump));
-        assertEquals(info.levels(), proof.info().levels());
-        assertEquals(info.comments(), proof.info().comments());
+        assertEquals(VOTE_INFO.levels(), proof.info().levels());
+        assertEquals(VOTE_INFO.comments(), proof.info().comments());
     }
 
     @Test
@@ -85,6 +85,7 @@ class IdentityBlindProofTest {
         var clientSk = new ClientSecretKey(Unpooled.wrappedBuffer(ByteBufUtil.decodeHexDump(CLIENT_SECRET_HEX)));
         var serverSk = new ServerSecretKey(Unpooled.wrappedBuffer(ByteBufUtil.decodeHexDump(SERVER_SECRET_HEX)));
         var serverPk = new ServerPublicKey(serverSk);
+        var ctx = new VoteClientContext(serverPk, RandomGenerator.of("SecureRandom")).readSecretKey(clientSk);
 
         var sig = new IdentitySignature(Unpooled.wrappedBuffer(ByteBufUtil.decodeHexDump(IDENTITY_SIGN_HEX)));
 
@@ -95,7 +96,7 @@ class IdentityBlindProofTest {
         var entropyBytes = Unpooled.wrappedBuffer(ByteBufUtil.decodeHexDump(entropyBytesHex));
         var entropy = (RandomGenerator) entropyBytes::readLongLE;
 
-        var proof = new IdentityBlindProof(clientSk, serverPk, WORK, VOTE_INFO, sig, entropy);
+        var proof = new IdentityBlindProof(ctx, WORK, VOTE_INFO, sig, entropy);
         var dump = Unpooled.buffer(BLINDED_PROOF_HEX.length() / 2);
         proof.dump(dump);
         assertEquals(BLINDED_PROOF_HEX, ByteBufUtil.hexDump(dump));

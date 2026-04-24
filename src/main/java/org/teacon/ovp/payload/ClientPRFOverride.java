@@ -25,8 +25,8 @@ public final class ClientPRFOverride {
     final ECP s;
     final byte[] ePassMnem;
 
-    ClientPRFOverride(ClientSecretKey secret, byte[] envelopePayload) {
-        this.s = ECP.generator().mul(secret.s);
+    ClientPRFOverride(VoteClientContext context, byte[] envelopePayload) {
+        this.s = ECP.generator().mul(context.secretKey);
         this.ePassMnem = Arrays.copyOf(envelopePayload, 224);
     }
 
