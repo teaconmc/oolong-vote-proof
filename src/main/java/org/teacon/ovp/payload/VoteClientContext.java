@@ -89,9 +89,11 @@ public final class VoteClientContext {
             // derive password seed key and decrypt password envelope
             var seedKey = Unpooled.buffer(0);
             this.hashToPasswordSeed(absent, seedKey);
-            var envelope = Unpooled.wrappedBuffer(resp.ePass);
             var ctx = this.serverKeyBytes.slice();
-            this.secretKey.copy(BLS12381.decodeEnvelope(envelope, ctx, ctx.readableBytes(), seedKey));
+            var envelopeBytes = Unpooled.buffer(224);
+            BLS12381.decodeEnvelope(resp.envelope(), envelopeBytes);
+            var envelopePart = envelopeBytes.slice(0, 128);
+            this.secretKey.copy(BLS12381.decodeEnvelopePart(envelopePart, ctx, ctx.readableBytes(), seedKey));
             return this;
         } catch (RuntimeException e) {
             throw new IOException("malformed resp format or invalid password", e);
@@ -108,9 +110,13 @@ public final class VoteClientContext {
             // derive mnemonic seed key and decrypt mnemonic envelope
             var seedKey = Unpooled.buffer(0);
             this.hashToMnemonicSeed(mnemonic, seedKey);
-            var envelope = Unpooled.wrappedBuffer(resp.eMnem);
             var ctx = this.serverKeyBytes.slice();
-            this.secretKey.copy(BLS12381.decodeEnvelope(envelope, ctx, ctx.readableBytes(), seedKey));
+            var envelopeBytes = Unpooled.buffer(224);
+            BLS12381.decodeEnvelope(resp.envelope(), envelopeBytes);
+            var envelopePart = Unpooled.buffer(128);
+            envelopePart.writeBytes(envelopeBytes, 0, 32);
+            envelopePart.writeBytes(envelopeBytes, 128, 96);
+            this.secretKey.copy(BLS12381.decodeEnvelopePart(envelopePart, ctx, ctx.readableBytes(), seedKey));
             return this;
         } catch (RuntimeException e) {
             throw new IOException("malformed resp format or invalid mnemonic", e);
@@ -161,15 +167,18 @@ public final class VoteClientContext {
         this.hashToMnemonicSeed(mnemonic, seedKey);
         this.hashToPasswordSeed(resp, seedKey);
         // write envelope bytes
-        var secret = this.secretKey;
         var envelopeBytes = new byte[224];
-        var ctx = this.serverKeyBytes.slice();
+        var ctxMnem = this.serverKeyBytes.slice();
+        var saltMnem = Unpooled.wrappedBuffer(saltBytes);
         var eMnem = Unpooled.wrappedBuffer(envelopeBytes, 96, 128).writerIndex(0);
-        BLS12381.encodeEnvelope(secret, ctx, ctx.readableBytes(), salt, seedKey, eMnem);
+        BLS12381.encodeEnvelopePart(this.secretKey, ctxMnem, ctxMnem.readableBytes(), saltMnem, seedKey, eMnem);
+        var ctxPass = this.serverKeyBytes.slice();
+        var saltPass = Unpooled.wrappedBuffer(saltBytes);
         var ePass = Unpooled.wrappedBuffer(envelopeBytes, 0, 128).writerIndex(0);
-        BLS12381.encodeEnvelope(secret, ctx.readerIndex(0), ctx.readableBytes(), salt.readerIndex(0), seedKey, ePass);
+        BLS12381.encodeEnvelopePart(this.secretKey, ctxPass, ctxPass.readableBytes(), saltPass, seedKey, ePass);
+        var envelope = BLS12381.encodeEnvelope(Unpooled.wrappedBuffer(envelopeBytes));
         // construct override
-        return new ClientPRFOverride(this, envelopeBytes);
+        return new ClientPRFOverride(this, envelope);
     }
 
     public ClientPointCommit makePointCommit() {

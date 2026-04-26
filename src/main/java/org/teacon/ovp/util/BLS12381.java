@@ -2,6 +2,7 @@ package org.teacon.ovp.util;
 
 import com.google.common.hash.HashCode;
 import com.google.common.hash.Hashing;
+import com.google.common.io.BaseEncoding;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
@@ -12,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.text.Normalizer;
 import java.util.Arrays;
 import java.util.random.RandomGenerator;
+import java.util.regex.Pattern;
 
 public final class BLS12381 {
     private static final BIG MODULUS;
@@ -19,12 +21,16 @@ public final class BLS12381 {
     private static final ECP2 GENERATOR_NEGATED;
     private static final int CURVE_ORDER_BYTES = 32;
     private static final int CURVE_ORDER_ZEROS = CONFIG_BIG.MODBYTES - CURVE_ORDER_BYTES;
+    private static final Pattern ENVELOPE_PATTERN;
+    private static final BaseEncoding ENVELOPE_BASE64;
 
     static {
         MODULUS = new BIG(ROM.Modulus);
         CURVE_ORDER = new BIG(ROM.CURVE_Order);
         GENERATOR_NEGATED = ECP2.generator();
         GENERATOR_NEGATED.neg();
+        ENVELOPE_PATTERN = Pattern.compile("#[A-Za-z0-9_-]{299}");
+        ENVELOPE_BASE64 = BaseEncoding.base64Url().omitPadding();
     }
 
     public static String bytesToString(boolean enableLonger, ByteBuf input) {
@@ -400,8 +406,29 @@ public final class BLS12381 {
         Arrays.fill(buffer, (byte) 0);
     }
 
-    public static void encodeEnvelope(BIG secret, ByteBuf context, int contextLength,
-                                      ByteBuf nonce, ByteBuf seedKey, ByteBuf envelope) {
+    public static String encodeEnvelope(ByteBuf envelope) {
+        var bytes = ByteBufUtil.getBytes(envelope, envelope.readerIndex(), 224, false);
+        var encoded = "#" + ENVELOPE_BASE64.encode(bytes);
+        if (!ENVELOPE_PATTERN.matcher(encoded).matches()) {
+            throw new IllegalArgumentException("invalid envelope string");
+        }
+        envelope.skipBytes(224);
+        return encoded;
+    }
+
+    public static void decodeEnvelope(String envelope, ByteBuf output) {
+        if (!ENVELOPE_PATTERN.matcher(envelope).matches()) {
+            throw new IllegalArgumentException("invalid envelope string");
+        }
+        var decoded = ENVELOPE_BASE64.decode(envelope.substring(1));
+        if (decoded.length != 224) {
+            throw new IllegalArgumentException("invalid envelope string");
+        }
+        output.writeBytes(decoded);
+    }
+
+    public static void encodeEnvelopePart(BIG secret, ByteBuf context, int contextLength,
+                                          ByteBuf nonce, ByteBuf seedKey, ByteBuf envelope) {
         var index = envelope.writerIndex();
         envelope.writeBytes(nonce.readSlice(32));
         BLS12381.fieldToBytes(secret, envelope);
@@ -427,7 +454,7 @@ public final class BLS12381 {
         envelope.writeBytes(hmac.hash().asBytes());
     }
 
-    public static BIG decodeEnvelope(ByteBuf envelope, ByteBuf context, int contextLength, ByteBuf seedKey) {
+    public static BIG decodeEnvelopePart(ByteBuf envelope, ByteBuf context, int contextLength, ByteBuf seedKey) {
         var index = envelope.readerIndex();
         var seedKeyBytes = new byte[64];
         seedKey.readBytes(seedKeyBytes);
@@ -451,7 +478,7 @@ public final class BLS12381 {
             var source = index + i;
             seedKeyBytes[i] ^= envelope.getByte(source);
         }
-        return bytesToField(Unpooled.wrappedBuffer(seedKeyBytes, 32, 32));
+        return bytesToField(Unpooled.wrappedBuffer(seedKeyBytes, 32, CURVE_ORDER_BYTES));
     }
 
     private BLS12381() {

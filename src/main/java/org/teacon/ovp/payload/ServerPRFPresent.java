@@ -16,21 +16,20 @@ public final class ServerPRFPresent {
         }
     }
 
+    public String envelope() {
+        return this.envelope;
+    }
+
     public void dump(ByteBuf output) {
         BLS12381.pointToSignature(this.n, output);
-        output.writeBytes(this.ePass, 0, 128).writeBytes(this.eMnem, 32, 96);
+        BLS12381.decodeEnvelope(this.envelope, output);
     }
 
     final ECP n;
-    final byte[] ePass;
-    final byte[] eMnem;
+    final String envelope;
 
     ServerPRFPresent(ByteBuf input) {
-        this.ePass = new byte[128];
-        this.eMnem = new byte[128];
         this.n = BLS12381.signatureToPoint(input);
-        var salt = input.readSlice(32);
-        salt.readBytes(this.ePass, 0, 32).readerIndex(0).readBytes(this.eMnem, 0, 32);
-        input.readBytes(this.ePass, 32, 96).readBytes(this.eMnem, 32, 96);
+        this.envelope = BLS12381.encodeEnvelope(input);
     }
 }

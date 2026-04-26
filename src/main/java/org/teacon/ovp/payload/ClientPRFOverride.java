@@ -6,7 +6,6 @@ import org.teacon.ovp.util.BLS12381;
 
 import java.security.GeneralSecurityException;
 import java.security.SignatureException;
-import java.util.Arrays;
 
 public final class ClientPRFOverride {
     public static ClientPRFOverride load(ByteBuf input) throws GeneralSecurityException {
@@ -17,22 +16,25 @@ public final class ClientPRFOverride {
         }
     }
 
+    public String envelope() {
+        return this.envelope;
+    }
+
     public void dump(ByteBuf output) {
         BLS12381.pointToSignature(this.s, output);
-        output.writeBytes(this.ePassMnem, 0, 224);
+        BLS12381.decodeEnvelope(this.envelope, output);
     }
 
     final ECP s;
-    final byte[] ePassMnem;
+    final String envelope;
 
-    ClientPRFOverride(VoteClientContext context, byte[] envelopePayload) {
+    ClientPRFOverride(VoteClientContext context, String envelope) {
         this.s = ECP.generator().mul(context.secretKey);
-        this.ePassMnem = Arrays.copyOf(envelopePayload, 224);
+        this.envelope = envelope;
     }
 
     ClientPRFOverride(ByteBuf input) {
         this.s = BLS12381.signatureToPoint(input);
-        this.ePassMnem = new byte[224];
-        input.readBytes(this.ePassMnem);
+        this.envelope = BLS12381.encodeEnvelope(input);
     }
 }
