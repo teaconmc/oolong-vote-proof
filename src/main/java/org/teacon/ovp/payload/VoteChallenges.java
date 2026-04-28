@@ -2,6 +2,7 @@ package org.teacon.ovp.payload;
 
 import io.netty.buffer.Unpooled;
 import org.teacon.ovp.miracl.core.BLS12381.BIG;
+import org.teacon.ovp.miracl.core.BLS12381.ECP;
 import org.teacon.ovp.util.BLS12381;
 
 import java.util.random.RandomGenerator;
@@ -38,6 +39,11 @@ public final class VoteChallenges {
         BLS12381.pairingToIndexBE(rPairing, buf);
         var c = BLS12381.hashToScalar(buf, buf.readableBytes());
         return BIG.comp(proof.c, c) == 0;
+    }
+
+    public static boolean validate(ClientPointCommit commit, ClientRevocation revocation) {
+        var pair = BLS12381.pairingWithGeneratorNegative(ECP.generator(), revocation.c, commit.s);
+        return pair.isunity();
     }
 
     private VoteChallenges() {

@@ -28,6 +28,11 @@ public final class ServerPRFPresent {
     final ECP n;
     final String envelope;
 
+    ServerPRFPresent(ServerPRFAbsent answer, String envelope) {
+        this.n = answer.n;
+        this.envelope = envelope;
+    }
+
     ServerPRFPresent(ByteBuf input) {
         this.n = BLS12381.signatureToPoint(input);
         this.envelope = BLS12381.encodeEnvelope(input);

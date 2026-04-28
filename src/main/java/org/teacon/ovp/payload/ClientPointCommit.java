@@ -26,6 +26,10 @@ public final class ClientPointCommit {
         this.s = ECP.generator().mul(context.secretKey);
     }
 
+    ClientPointCommit(IdentityUserEntry entry) {
+        this.s = entry.commit;
+    }
+
     ClientPointCommit(ByteBuf input) {
         this.s = BLS12381.signatureToPoint(input);
     }

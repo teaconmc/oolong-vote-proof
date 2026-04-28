@@ -6,6 +6,7 @@ import org.teacon.ovp.util.BLS12381;
 
 import java.security.GeneralSecurityException;
 import java.security.InvalidKeyException;
+import java.util.function.Supplier;
 
 public final class ServerSecretKey {
     public static ServerSecretKey load(ByteBuf input) throws GeneralSecurityException {
@@ -27,6 +28,13 @@ public final class ServerSecretKey {
     final BIG w;
     final BIG x;
     final BIG y;
+
+    ServerSecretKey(Supplier<BIG> v, VoteServerContext context) {
+        this.v = new BIG(v.get());
+        this.w = new BIG(context.w);
+        this.x = new BIG(context.x);
+        this.y = new BIG(context.y);
+    }
 
     ServerSecretKey(ByteBuf input) {
         this.v = BLS12381.secretKeyToField(input);
