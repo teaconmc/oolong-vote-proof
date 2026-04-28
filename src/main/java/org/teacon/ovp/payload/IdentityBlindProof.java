@@ -87,7 +87,10 @@ public final class IdentityBlindProof {
         this.signature.dump(buf);
         this.d = BLS12381.hashToScalar(buf, buf.readableBytes());
         // c (scalar)
-        context.serverKey.dump(buf.clear());
+        ByteBuf output = buf.clear();
+        BLS12381.pointToPubKey(context.serverKey.w, output);
+        BLS12381.pointToPubKey(context.serverKey.x, output);
+        BLS12381.pointToPubKey(context.serverKey.y, output);
         BLS12381.fieldToBytes(this.d, buf);
         BLS12381.pointToSignature(qPoint, buf);
         BLS12381.pairingToIndexBE(rPairing, buf);

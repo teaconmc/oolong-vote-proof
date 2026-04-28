@@ -8,10 +8,6 @@ import java.security.GeneralSecurityException;
 import java.security.SignatureException;
 
 public final class ServerPRFAbsent {
-    public static ServerPRFAbsent from(ServerSecretKey serverSecret, ClientPRFRequest request) {
-        return new ServerPRFAbsent(serverSecret, request);
-    }
-
     public static ServerPRFAbsent load(ByteBuf input) throws GeneralSecurityException {
         try {
             return new ServerPRFAbsent(input);

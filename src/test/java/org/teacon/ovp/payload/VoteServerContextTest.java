@@ -88,14 +88,13 @@ class VoteServerContextTest {
             "611c7a3a615f7265616c6c792f6c6f6e672f706174682e7365676d656e74047a7a3a3000a33cd197e0bb215e0e1b46d4967329a0" +
             "1cfaf5353968e5bf43702a74ed14c081115effc3133b98fcd65f7b94ccc7ecbb96e915629f89127452bb4b523e6b588f0fba10a8" +
             "88481c1635193c955890392f425bb419cf4be2016813336633758b2f";
-    private static final String VOTING_PROOF_HEX = "601dab2707cf4e7391fe62f0e147948ea2ff4294095aebf83801e0dbbd758881" +
-            "9d1f146ee3d068d8a7cf4b67bfb3a2f11dd0b25d0f24335240cc8b6bb7103471430003613a61400003613a7a3c0003623a78fffe" +
+    private static final String BLINDED_PROOF_HEX = "601dab2707cf4e7391fe62f0e147948e9717324f9c5a011110bbcbca8bea4b2d" +
+            "f4caa2fc7f69a1b6da490c1750594481dee2fe1dc0c9a7310c5165c7531de184430003613a61400003613a7a3c0003623a78fffe" +
             "056669727374067365636f6e6403613a7807613a782f792e7a03663a6219663a622f766572792e6c6f6e675f7365676d656e742d" +
-            "31323304663a6232106c6f6e672e6e616d6573706163653a61106c6f6e672e6e616d6573706163653a7a037a3a611c7a3a615f72" +
-            "65616c6c792f6c6f6e672f706174682e7365676d656e74047a7a3a3000b7f6a8dc610d3d52d4696a139393ff3110edea8ffa2933" +
-            "c45fb298650bd3458ff0c412f1ad30727a6ac732068e542feb92dab833a9653c278e936b8dda50b9b4b39c5573bb2eab12b0ce54" +
-            "e9c0feb1b11377738f9e57592246c73a6e420ac1eb62cfb34c24390bb2f9746c7bb24f5200c4f67e462917522e815389216be259" +
-            "185b38f54e43f6beb5fec356bdb323ed8f79fe19da2998f379b6d1575d8991c83c";
+            "31323304663a6232106c6f6e672e6e616d6573706163653a61106c6f6e672e6e616d6573706163653a7a037a3a610098ea2bd972" +
+            "0bf56a962f72e92e66de6f6590c151df1d7b43a383b8adc2a86d446fc7fc662592388b19e8a6e9b26e2ff3ab4c81b133e7a97a86" +
+            "4097e9901efe74ae011ab0ea116d8c427af52d91b17200618486a063f525dce943e17556e1e7c213cd9e244269940c92316eb527" +
+            "845ff6b1b289a539086cbfa32192d01c7a976f3d273b35395be42b4e955f7cd52777a30959a264404748d98c3e576e18e7da72";
     private static final String CLIENT_REVOKE_HEX = "8c5313e939614fa5187905bd2ca3d3f67f5e4704d77983af07f692ca21ebe333" +
             "a4cc605b46b69b256300b3883f8e007e0557aacd48fa006a8915cb83c302a39c584306440fdb0d5112f4ac8e0647f0faf88c4df6" +
             "65e1d6ab69c87b1857d5e56a";
@@ -111,12 +110,12 @@ class VoteServerContextTest {
         userSecret.dump(userSecretDump);
         assertEquals(SERVER_SECRET_HEX, ByteBufUtil.hexDump(userSecretDump));
 
-        var userPublic = new ServerPublicKey(userSecret);
+        var userPublic = server.makePublicKey(USER_UUID);
         var userPublicDump = Unpooled.buffer(384);
         userPublic.dump(userPublicDump);
         assertEquals(SERVER_PUBLIC_HEX, ByteBufUtil.hexDump(userPublicDump));
 
-        var absentPublic = new ServerPublicKey(server.makeSecretKey(FAKE_UUID));
+        var absentPublic = server.makePublicKey(FAKE_UUID);
         var absentPublicDump = Unpooled.buffer(384);
         absentPublic.dump(absentPublicDump);
         assertEquals(SERVER_ABSENT_HEX, ByteBufUtil.hexDump(absentPublicDump));
@@ -210,7 +209,7 @@ class VoteServerContextTest {
         var signatureDump = Unpooled.buffer();
         signature.dump(signatureDump);
         assertEquals(SIGN_RESPONSE_HEX, ByteBufUtil.hexDump(signatureDump));
-        var proofBytes = Unpooled.wrappedBuffer(ByteBufUtil.decodeHexDump(VOTING_PROOF_HEX));
+        var proofBytes = Unpooled.wrappedBuffer(ByteBufUtil.decodeHexDump(BLINDED_PROOF_HEX));
         var proof = assertDoesNotThrow(() -> IdentityBlindProof.load(proofBytes));
         assertEquals(VOTE_INFO.levels(), proof.info().levels());
         assertEquals(VOTE_INFO.comments(), proof.info().comments());
@@ -224,7 +223,6 @@ class VoteServerContextTest {
                 "038bc91dead2f13dd1bdfe76ea3dccda0452bffd2fd20dc56c96c87b2eddff00fb8e88fd1283247c0ca0bf85b2b1321eb7e9";
         var rngBytes = Unpooled.wrappedBuffer(ByteBufUtil.decodeHexDump(rngSource));
         var server = new VoteServerContext(SEED.toCharArray(), db, rngBytes::readLongLE);
-        var blindProofKey = new ServerPublicKey(new ServerSecretKey(() -> server.w, server));
         var entryBytes = Unpooled.wrappedBuffer(ByteBufUtil.decodeHexDump(SERVER_LOOKUP_HEX));
         var entry = assertDoesNotThrow(() -> IdentityUserEntry.load(entryBytes));
         db.accounts.put(USER_UUID, entry);
@@ -236,16 +234,16 @@ class VoteServerContextTest {
         var signatureDump = Unpooled.buffer();
         signature.dump(signatureDump);
         assertEquals(SIGN_RESPONSE_HEX, ByteBufUtil.hexDump(signatureDump));
-        var proofBytes = Unpooled.wrappedBuffer(ByteBufUtil.decodeHexDump(VOTING_PROOF_HEX));
+        var proofBytes = Unpooled.wrappedBuffer(ByteBufUtil.decodeHexDump(BLINDED_PROOF_HEX));
         var proof = assertDoesNotThrow(() -> IdentityBlindProof.load(proofBytes));
-        assertTrue(VoteChallenges.validate(blindProofKey, proof));
+        assertTrue(VoteChallenges.validate(server, proof));
 
         server.readBlindProof(proof).toCompletableFuture().join();
 
         assertEquals(1, db.votes.size());
         var voteDump = Unpooled.buffer();
         db.votes.getFirst().dump(voteDump);
-        assertEquals(VOTING_PROOF_HEX, ByteBufUtil.hexDump(voteDump));
+        assertEquals(BLINDED_PROOF_HEX, ByteBufUtil.hexDump(voteDump));
         assertEquals(0, rngBytes.readableBytes());
     }
 
@@ -267,7 +265,7 @@ class VoteServerContextTest {
         var signatureDump = Unpooled.buffer();
         signature.dump(signatureDump);
         assertEquals(SIGN_RESPONSE_HEX, ByteBufUtil.hexDump(signatureDump));
-        var proofBytes = Unpooled.wrappedBuffer(ByteBufUtil.decodeHexDump(VOTING_PROOF_HEX));
+        var proofBytes = Unpooled.wrappedBuffer(ByteBufUtil.decodeHexDump(BLINDED_PROOF_HEX));
         var proof = assertDoesNotThrow(() -> IdentityBlindProof.load(proofBytes));
         server.readBlindProof(proof).toCompletableFuture().join();
 
@@ -276,7 +274,7 @@ class VoteServerContextTest {
         server.readRevocation(USER_UUID, revocation).toCompletableFuture().join();
 
         assertEquals(1, db.revocations.size());
-        assertEquals(0, db.votes.size());
+        assertEquals(1, db.votes.size());
         var revocationDump = Unpooled.buffer();
         db.revocations.getFirst().dump(revocationDump);
         assertEquals(CLIENT_REVOKE_HEX, ByteBufUtil.hexDump(revocationDump));

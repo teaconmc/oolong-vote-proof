@@ -8,10 +8,6 @@ import java.security.GeneralSecurityException;
 import java.security.InvalidKeyException;
 
 public final class ServerPublicKey {
-    public static ServerPublicKey from(ServerSecretKey sk) {
-        return new ServerPublicKey(sk);
-    }
-
     public static ServerPublicKey load(ByteBuf input) throws GeneralSecurityException {
         try {
             return new ServerPublicKey(input);

@@ -3,6 +3,7 @@ package org.teacon.ovp.payload;
 import io.netty.buffer.Unpooled;
 import org.teacon.ovp.miracl.core.BLS12381.BIG;
 import org.teacon.ovp.miracl.core.BLS12381.ECP;
+import org.teacon.ovp.miracl.core.BLS12381.ECP2;
 import org.teacon.ovp.util.BLS12381;
 
 import java.util.random.RandomGenerator;
@@ -24,16 +25,40 @@ public final class VoteChallenges {
         return pair.isunity();
     }
 
-    public static boolean validate(ServerPublicKey serverKey, IdentityBlindProof proof) {
+    public static boolean validate(VoteClientContext context, IdentityBlindProof proof) {
         var buf = Unpooled.buffer(1040);
         buf.writeLong(proof.work.getMostSignificantBits()).writeLong(proof.work.getLeastSignificantBits());
         var qPoint = BLS12381.hashToPoint(buf, 128 / Byte.SIZE).mul(proof.z);
         qPoint.sub(proof.id.id.mul(proof.c));
-        var rPoint = serverKey.w.mul(proof.c).mul(proof.signature.rolesHash);
-        rPoint.add(serverKey.x.mul(proof.c));
-        rPoint.add(serverKey.y.mul(proof.z));
+        var rPoint = context.serverKey.w.mul(proof.c).mul(proof.signature.rolesHash);
+        rPoint.add(context.serverKey.x.mul(proof.c));
+        rPoint.add(context.serverKey.y.mul(proof.z));
         var rPairing = BLS12381.pairingWithGeneratorNegative(proof.signature.a, rPoint, proof.signature.b.mul(proof.c));
-        serverKey.dump(buf.clear());
+        BLS12381.pointToPubKey(context.serverKey.w, buf.clear());
+        BLS12381.pointToPubKey(context.serverKey.x, buf);
+        BLS12381.pointToPubKey(context.serverKey.y, buf);
+        BLS12381.fieldToBytes(proof.d, buf);
+        BLS12381.pointToSignature(qPoint, buf);
+        BLS12381.pairingToIndexBE(rPairing, buf);
+        var c = BLS12381.hashToScalar(buf, buf.readableBytes());
+        return BIG.comp(proof.c, c) == 0;
+    }
+
+    public static boolean validate(VoteServerContext context, IdentityBlindProof proof) {
+        var buf = Unpooled.buffer(1040);
+        buf.writeLong(proof.work.getMostSignificantBits()).writeLong(proof.work.getLeastSignificantBits());
+        var w = ECP2.generator().mul(context.w);
+        var x = ECP2.generator().mul(context.x);
+        var y = ECP2.generator().mul(context.y);
+        var qPoint = BLS12381.hashToPoint(buf, 128 / Byte.SIZE).mul(proof.z);
+        qPoint.sub(proof.id.id.mul(proof.c));
+        var rPoint = w.mul(proof.c).mul(proof.signature.rolesHash);
+        rPoint.add(x.mul(proof.c));
+        rPoint.add(y.mul(proof.z));
+        var rPairing = BLS12381.pairingWithGeneratorNegative(proof.signature.a, rPoint, proof.signature.b.mul(proof.c));
+        BLS12381.pointToPubKey(w, buf.clear());
+        BLS12381.pointToPubKey(x, buf);
+        BLS12381.pointToPubKey(y, buf);
         BLS12381.fieldToBytes(proof.d, buf);
         BLS12381.pointToSignature(qPoint, buf);
         BLS12381.pairingToIndexBE(rPairing, buf);

@@ -32,8 +32,8 @@ class IdentityBlindProofTest {
             "31323304663a6232106c6f6e672e6e616d6573706163653a61106c6f6e672e6e616d6573706163653a7a037a3a611c7a3a615f72" +
             "65616c6c792f6c6f6e672f706174682e7365676d656e74047a7a3a3000ab9ed0df4b2425e22a84e7a2f7469baa6f80107462221b" +
             "cc26770d5b345b1a781503036d2acc7a307dfb2deb5d46e0fc871864c00a9078ce80cdaef2db9bed0c7d2074f8b36b2be7d973d9" +
-            "cc74f7a4325761c5a239ff251cd80f3c0d39d4b5970a8efb8314ca84adb06b5eeddbf0ea4273f3dcb717c98fb95bd49c0e02ebde" +
-            "761cb30c5f279efdebe94b4d5ff4c1ab9d7972e34289195cc829cc70fc2e8f405b";
+            "cc74f7a4325761c5a239ff251cd80f3c0d39d4b59735a65c135df33773f1035dd301c4517d3339b4701a53d4b1570d5f6cd27ef6" +
+            "e4461e5c47259062a9451629113714b7c46f210db7b8d325da727334e63ffbf565";
     public static final VoteInformation VOTE_INFO = new VoteInformation(Map.of(
             new TagReference("a", "z"), VoteInformation.Level.TWO,
             new TagReference("a", "a"), VoteInformation.Level.THREE_HALF,
@@ -118,6 +118,7 @@ class IdentityBlindProofTest {
         var encoded = ByteBufUtil.decodeHexDump(BLINDED_PROOF_HEX);
         var tampered = Unpooled.wrappedBuffer(encoded).setByte(encoded.length - 1, 0x00);
         var badProof = new IdentityBlindProof(tampered);
-        assertFalse(VoteChallenges.validate(serverPk, badProof));
+        var ctx = new VoteClientContext(serverPk, RandomGenerator.of("SecureRandom"));
+        assertFalse(VoteChallenges.validate(ctx, badProof));
     }
 }

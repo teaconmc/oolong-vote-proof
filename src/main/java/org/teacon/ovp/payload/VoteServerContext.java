@@ -10,8 +10,8 @@ import org.teacon.ovp.util.BLS12381;
 
 import java.nio.CharBuffer;
 import java.nio.charset.StandardCharsets;
-import java.util.concurrent.CompletableFuture;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.random.RandomGenerator;
 
@@ -41,6 +41,10 @@ public final class VoteServerContext {
     public ServerSecretKey makeSecretKey(UUID uuid) {
         var salt = "id-" + uuid + "-oprf-key";
         return new ServerSecretKey(() -> this.makeSaltedSecret(salt, Unpooled.EMPTY_BUFFER, 0), this);
+    }
+
+    public ServerPublicKey makePublicKey(UUID uuid) {
+        return new ServerPublicKey(this.makeSecretKey(uuid));
     }
 
     public ServerPRFAbsent makePRFAbsent(UUID uuid, ClientPRFRequest request) {
@@ -81,8 +85,7 @@ public final class VoteServerContext {
             if (revocations.stream().anyMatch(r -> this.makeWorkIndex(r, proof.work).equals(index))) {
                 return CompletableFuture.failedStage(new IllegalArgumentException("revoked identity blind proof"));
             }
-            var key = new ServerPublicKey(new ServerSecretKey(() -> this.w, this));
-            if (!VoteChallenges.validate(key, proof)) {
+            if (!VoteChallenges.validate(this, proof)) {
                 return CompletableFuture.failedStage(new IllegalArgumentException("invalid identity blind proof"));
             }
             return this.service.storeVote(proof);

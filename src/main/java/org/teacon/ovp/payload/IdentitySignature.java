@@ -17,16 +17,6 @@ import java.util.TreeSet;
 import java.util.random.RandomGenerator;
 
 public final class IdentitySignature {
-    public static IdentitySignature from(ServerSecretKey serverSecret,
-                                         ClientPointCommit pointCommit,
-                                         Collection<TagReference> roles) {
-        return new IdentitySignature(serverSecret, pointCommit, roles, VoteChallenges.RANDOM);
-    }
-
-    public static IdentitySignature from(IdentitySignature signature) {
-        return new IdentitySignature(signature, VoteChallenges.RANDOM);
-    }
-
     public static IdentitySignature load(ByteBuf input) throws GeneralSecurityException {
         try {
             return new IdentitySignature(input);
