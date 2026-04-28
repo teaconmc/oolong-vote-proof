@@ -77,20 +77,21 @@ sequenceDiagram
       和用户有关，$SK = (w, x, y)$ 由 $seed$ 唯一决定。
     * 进一步计算公钥 $\tilde{V} = v \cdot \tilde{G}$
       和 $PK = (\tilde{W}, \tilde{X}, \tilde{Y}) = (w \cdot \tilde{G}, x \cdot \tilde{G}, y \cdot \tilde{G})$。
-    * 若私钥派生结果不满足要求，则延长 $\mathrm{PBKDF2}$ 输出并重试，直到私钥满足条件。
 2. **服务端准备伪输出材料**：
     * 将 `id-`、用户 $uuid$ 和 `-fake-key`
       的拼接结果作为盐值，计算 $\mathrm{PBKDF2}(\mathrm{HMAC}, \textit{seed}, 2048, 256)$。
     * 取前 96 字节记为 $\upsilon^{\ast}$ 并计算 $v^{\ast} = H_s(\upsilon^{\ast})$，后 160 字节按 32
       字节分割，记为 $(salt^{\ast}, \phi_{pass}^{\ast}, \psi_{pass}^{\ast}, \phi_{mnem}^{\ast}, \psi_{mnem}^{\ast})$。
-    * 若伪私钥派生结果不满足要求，则延长 $\mathrm{PBKDF2}$ 输出并重试，直到私钥满足条件。
-3. **客户端发起盲化请求**：
+3. **派生及伪输出材料重试**：
+    * 若 $v$ 或 $v^{\ast}$ 派生结果为 $0$ 不满足要求，则延长 $\mathrm{PBKDF2}$ 输出并重试，直到满足条件。
+    * 重试方式：延长 $\mathrm{PBKDF2}$ 输出 32 字节并多去除开头的 32 字节并重试。
+4. **客户端发起盲化请求**：
     * 客户端输入登录密码 $pass$ 并计算哈希点 $P_{pass} = H_p(pass)$。
     * 选取随机盲化因子 $r \in \mathbb{Z}_p$，发送 `ClientPRFRequest` $M = r \cdot P_{pass}$ 至服务端。
-4. **服务端返回 PRF 响应**：
+5. **服务端返回 PRF 响应**：
     * 服务端利用关联密钥 $v$ 计算 $N = v \cdot M$。
     * 服务端发送 `ServerPRFAbsent` $N$ 至客户端。
-5. **客户端生成注册材料并提交覆盖凭证**：
+6. **客户端生成注册材料并提交覆盖凭证**：
     * 客户端计算 $v \cdot P_{pass} = r^{-1} \cdot N$。
     * 客户端在本地随机生成私钥 $s \in \mathbb{Z}_p$、恢复助记词 $mnem$ 和 32 字节随机序列 $salt$。
     * 执行 $\mathrm{PBKDF2}(\mathrm{HMAC}, H_s(pass, v \cdot P_{pass}), 2048, 64)$，取前 32 字节为 $\phi_{pass}$，后 32
@@ -104,7 +105,7 @@ sequenceDiagram
     * 计算 $S = s \cdot G$
       和 $\epsilon = (salt, \psi_{pass} \oplus s, \alpha_{pass}, \psi_{mnem} \oplus s, \alpha_{mnem})$。
     * 客户端提交 `ClientPRFOverride` $(S, \epsilon)$。
-6. **服务端完成注册**：
+7. **服务端完成注册**：
     * 服务端直接执行 `DB.storeAccount` 存储 $(S, \epsilon)$ 及必要的账户绑定状态，并完成账户绑定。
 
 ### B. 用户密码登录
@@ -128,11 +129,11 @@ sequenceDiagram
     * 客户端发送 $M = r \cdot H_p(pass)$。
     * 服务端执行 `DB.fetchAccount` 读取用户 $uuid$ 对应账户。
 2. **服务端生成登录响应**：
-    * 若读取结果为 “已匹配”，则服务端直接使用返回结果中的 $\epsilon$，并结合 $v$ 计算响应后返回
+    * 若读取结果存在则服务端直接使用返回结果中的 $\epsilon$，并结合 $v$ 计算响应后返回
       `ServerPRFPresent` $(N, \epsilon)$。
-    * 若读取结果为“不存在”，则使用
+    * 若不存在则使用
       $(salt^{\ast}, \phi_{pass}^{\ast}, \psi_{pass}^{\ast}, \phi_{mnem}^{\ast}, \psi_{mnem}^{\ast})$
-      替代真实参数，并以 $v^{\ast}$ 替代 $v$ 计算伪响应值 $(N^{\ast}, \epsilon^{\ast})$。
+      替代真实参数，并以 $0$ 替代 $s$，$v^{\ast}$ 替代 $v$ 计算伪响应值 $(N^{\ast}, \epsilon^{\ast})$。
     * 服务端返回 `ServerPRFPresent` $(N, \epsilon)$ 或 $(N^{\ast}, \epsilon^{\ast})$，以防止客户端穷举用户注册状态。
 3. **客户端恢复私钥**：
     * 客户端恢复 $v \cdot P_{pass}$ 并通过 $pass$ 重新派生 $(\phi_{pass}, \psi_{pass})$。
@@ -404,24 +405,24 @@ sequenceDiagram
       keys, where $v$ is user-specific and $SK = (w, x, y)$ is uniquely determined by $seed$.
     * Then compute $\tilde{V} = v \cdot \tilde{G}$
       and $PK = (\tilde{W}, \tilde{X}, \tilde{Y}) = (w \cdot \tilde{G}, x \cdot \tilde{G}, y \cdot \tilde{G})$.
-    * If a derived private key does not satisfy the requirement, extend the $\mathrm{PBKDF2}$ output and retry until it
-      does.
 2. **Server Prepares Fake Output Materials**:
     * Use the concatenation of `id-`, user $uuid$, and `-fake-key` as the salt, and
       compute $\mathrm{PBKDF2}(\mathrm{HMAC}, \textit{seed}, 2048, 256)$.
     * Let the first 96 bytes be $\upsilon^{\ast}$ and compute $v^{\ast} = H_s(\upsilon^{\ast})$.
     * Split the remaining 160 bytes
       into $(salt^{\ast}, \phi_{pass}^{\ast}, \psi_{pass}^{\ast}, \phi_{mnem}^{\ast}, \psi_{mnem}^{\ast})$.
-    * If the fake private-key derivation does not satisfy the requirement, extend the $\mathrm{PBKDF2}$ output and retry
-      until it does.
-3. **Client Sends the Blinded Request**:
+3. **Retries Derivation and Fake Output Materials**:
+    * If the derived result of $v$ or $v^{\ast}$ equals $0$ and therefore does not satisfy the requirement, extend the
+      $\mathrm{PBKDF2}$ output and retry until the requirement is satisfied.
+    * Retry method: extend the $\mathrm{PBKDF2}$ output by 32 bytes, discard an additional leading 32 bytes, and retry.
+4. **Client Sends the Blinded Request**:
     * Client inputs the login password $pass$ and computes the hash point $P_{pass} = H_p(pass)$.
     * Client samples a random blinding factor $r \in \mathbb{Z}_p$ and sends `ClientPRFRequest` $M = r \cdot P_{pass}$
       to the server.
-4. **Server Returns the PRF Response**:
+5. **Server Returns the PRF Response**:
     * Server computes $N = v \cdot M$ using the associated key $v$.
     * Server sends `ServerPRFAbsent` $N$ to the client.
-5. **Client Generates Registration Materials and Submits the Override Credential**:
+6. **Client Generates Registration Materials and Submits the Override Credential**:
     * Client computes $v \cdot P_{pass} = r^{-1} \cdot N$.
     * Client locally generates secret key $s \in \mathbb{Z}_p$, recovery mnemonic $mnem$, and a 32-byte random $salt$.
     * Execute $\mathrm{PBKDF2}(\mathrm{HMAC}, H_s(pass, v \cdot P_{pass}), 2048, 64)$, taking the first 32 bytes
@@ -435,7 +436,7 @@ sequenceDiagram
     * Compute $S = s \cdot G$
       and $\epsilon = (salt, \psi_{pass} \oplus s, \alpha_{pass}, \psi_{mnem} \oplus s, \alpha_{mnem})$.
     * Client submits `ClientPRFOverride` $(S, \epsilon)$.
-6. **Server Completes Registration**:
+7. **Server Completes Registration**:
     * Server directly executes `DB.storeAccount` to store $(S, \epsilon)$ and the necessary bound account state, and
       completes account binding.
 
@@ -460,11 +461,11 @@ sequenceDiagram
     * Client sends $M = r \cdot H_p(pass)$.
     * Server executes `DB.fetchAccount` to read the account bound to user $uuid$.
 2. **Server Generates the Login Response**:
-    * If the fetch result is “matched”, server directly uses the returned $\epsilon$, then combines it with the real
+    * If the fetch result exists, server directly uses the returned $\epsilon$, then combines it with the real
       parameter $v$ to compute the response and returns `ServerPRFPresent` $(N, \epsilon)$.
-    * If the fetch result is “not found”, server
+    * If the fetch result does not exist, server
       uses $(salt^{\ast}, \phi_{pass}^{\ast}, \psi_{pass}^{\ast}, \phi_{mnem}^{\ast}, \psi_{mnem}^{\ast})$ in place of
-      the real parameters and uses $v^{\ast}$ in place of $v$ to compute the fake
+      the real parameters, uses $0$ in place of $s$, and uses $v^{\ast}$ in place of $v$ to compute the fake
       response $(N^{\ast}, \epsilon^{\ast})$.
     * Server returns either `ServerPRFPresent` $(N, \epsilon)$ or $(N^{\ast}, \epsilon^{\ast})$ to prevent client-side
       user enumeration.
