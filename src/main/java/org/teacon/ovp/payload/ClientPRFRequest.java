@@ -23,11 +23,10 @@ public final class ClientPRFRequest {
     final ECP m;
 
     ClientPRFRequest(VoteClientContext ctx) {
-        this.m = ctx.passwordHash.mul(ctx.randomScalar);
+        this.m = ctx.passwordHash.mul(ctx.randomScalar.core());
     }
 
     ClientPRFRequest(ByteBuf input) {
         this.m = BLS12381.signatureToPoint(input);
     }
 }
-

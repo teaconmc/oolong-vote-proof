@@ -23,7 +23,7 @@ public final class ClientRevocation {
     final ECP2 c;
 
     ClientRevocation(VoteClientContext context) {
-        this.c = ECP2.generator().mul(context.secretKey);
+        this.c = ECP2.generator().mul(context.secretKey.core());
     }
 
     ClientRevocation(ByteBuf input) {

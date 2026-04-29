@@ -28,10 +28,10 @@ public final class VoteClientContext {
     // password related
     final ByteBuf password;
     final ECP passwordHash;
-    final BIG randomScalar;
 
-    // secretKey
-    final BIG secretKey;
+    // lazy scalar (zero means uninitialized)
+    final WrappedLazyScalar randomScalar;
+    final WrappedLazyScalar secretKey;
 
     VoteClientContext(ServerPublicKey key, RandomGenerator generator) {
         // initialize immutable context and shared buffers
@@ -42,8 +42,8 @@ public final class VoteClientContext {
         // initialize resettable client-side state
         this.password = Unpooled.buffer();
         this.passwordHash = BLS12381.hashToPoint(this.password, 0);
-        this.randomScalar = BLS12381.randomToField(generator);
-        this.secretKey = BLS12381.randomToField(generator);
+        this.randomScalar = new WrappedLazyScalar();
+        this.secretKey = new WrappedLazyScalar();
     }
 
     public VoteClientContext readPassword(char[] password) throws IOException {
@@ -64,7 +64,7 @@ public final class VoteClientContext {
         // refresh derived password-related state
         ByteBufUtil.writeAscii(this.password, wrapped);
         this.passwordHash.copy(BLS12381.hashToPoint(this.password.slice(0, bytes), bytes));
-        this.randomScalar.copy(BLS12381.randomToField(this.rng));
+        this.randomScalar.zero();
         return this;
     }
 
@@ -72,7 +72,7 @@ public final class VoteClientContext {
         // clear password-derived state when importing an existing secret key
         this.password.setZero(0, this.password.capacity()).writerIndex(0).capacity(0);
         this.passwordHash.copy(BLS12381.hashToPoint(this.password, 0));
-        this.randomScalar.copy(BLS12381.randomToField(this.rng));
+        this.randomScalar.zero();
         // commit imported secret key
         this.secretKey.copy(key.s);
         return this;
@@ -127,9 +127,9 @@ public final class VoteClientContext {
         // wipe password and all password-derived state
         this.password.setZero(0, this.password.capacity()).writerIndex(0).capacity(0);
         this.passwordHash.copy(BLS12381.hashToPoint(this.password, 0));
-        this.randomScalar.copy(BLS12381.randomToField(this.rng));
+        this.randomScalar.zero();
         // clear secret key material
-        this.secretKey.copy(BLS12381.randomToField(this.rng));
+        this.secretKey.zero();
         return this;
     }
 
@@ -171,11 +171,11 @@ public final class VoteClientContext {
         var ctxMnem = this.serverKeyBytes.slice();
         var saltMnem = Unpooled.wrappedBuffer(saltBytes);
         var eMnem = Unpooled.wrappedBuffer(envelopeBytes, 96, 128).writerIndex(0);
-        BLS12381.encodeEnvelopePart(this.secretKey, ctxMnem, ctxMnem.readableBytes(), saltMnem, seedKey, eMnem);
+        BLS12381.encodeEnvelopePart(this.secretKey.core(), ctxMnem, ctxMnem.readableBytes(), saltMnem, seedKey, eMnem);
         var ctxPass = this.serverKeyBytes.slice();
         var saltPass = Unpooled.wrappedBuffer(saltBytes);
         var ePass = Unpooled.wrappedBuffer(envelopeBytes, 0, 128).writerIndex(0);
-        BLS12381.encodeEnvelopePart(this.secretKey, ctxPass, ctxPass.readableBytes(), saltPass, seedKey, ePass);
+        BLS12381.encodeEnvelopePart(this.secretKey.core(), ctxPass, ctxPass.readableBytes(), saltPass, seedKey, ePass);
         var envelope = BLS12381.encodeEnvelope(Unpooled.wrappedBuffer(envelopeBytes));
         // construct override
         return new ClientPRFOverride(this, envelope);
@@ -206,7 +206,7 @@ public final class VoteClientContext {
             // hash password bytes and password PRF point into a scalar
             var seedHashInput = output.slice(offset, seedHashInputSize).writerIndex(0);
             seedHashInput.writeBytes(this.password.slice());
-            BLS12381.pointToSignature(resp.n.mul(BLS12381.fieldInverse(this.randomScalar)), seedHashInput);
+            BLS12381.pointToSignature(resp.n.mul(BLS12381.fieldInverse(this.randomScalar.core())), seedHashInput);
             var seedHash = BLS12381.hashToScalar(seedHashInput, seedHashInputSize);
             // run PBKDF2 over the scalar bytes to derive a 64-byte seed key
             var seedInput = output.slice(offset + 64, 32).writerIndex(0);
@@ -235,6 +235,26 @@ public final class VoteClientContext {
             // wipe transient bytes and keep only derived seed key in-place
             output.setZero(offset + 64, bufferCapacity - 64);
             output.writerIndex(offset + 64);
+        }
+    }
+
+
+    final class WrappedLazyScalar {
+        private final BIG core = new BIG(0);
+
+        BIG core() {
+            if (this.core.nbits() == 0) {
+                this.core.copy(BLS12381.randomToField(VoteClientContext.this.rng));
+            }
+            return this.core;
+        }
+
+        void zero() {
+            this.core.zero();
+        }
+
+        void copy(BIG value) {
+            this.core.copy(value);
         }
     }
 }

@@ -12,7 +12,7 @@ public final class VoteChallenges {
     static final RandomGenerator RANDOM = RandomGenerator.of("SecureRandom");
 
     public static boolean validate(VoteClientContext context, ServerPRFAbsent evaluate) {
-        var m = context.passwordHash.mul(context.randomScalar);
+        var m = context.passwordHash.mul(context.randomScalar.core());
         var pair = BLS12381.pairingWithGeneratorNegative(m, context.serverKey.v, evaluate.n);
         return pair.isunity();
     }
@@ -20,7 +20,7 @@ public final class VoteChallenges {
     public static boolean validate(VoteClientContext context, IdentitySignature signature) {
         var point = context.serverKey.w.mul(signature.rolesHash);
         point.add(context.serverKey.x);
-        point.add(context.serverKey.y.mul(context.secretKey));
+        point.add(context.serverKey.y.mul(context.secretKey.core()));
         var pair = BLS12381.pairingWithGeneratorNegative(signature.a, point, signature.b);
         return pair.isunity();
     }

@@ -38,7 +38,7 @@ public final class IdentityDerivation {
         var workLength = 128 / Byte.SIZE;
         var buf = Unpooled.buffer(workLength);
         buf.writeLong(work.getMostSignificantBits()).writeLong(work.getLeastSignificantBits());
-        this.id = BLS12381.hashToPoint(buf, workLength).mul(context.secretKey);
+        this.id = BLS12381.hashToPoint(buf, workLength).mul(context.secretKey.core());
     }
 
     IdentityDerivation(ByteBuf input) {

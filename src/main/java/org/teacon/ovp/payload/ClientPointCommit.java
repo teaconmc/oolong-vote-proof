@@ -23,7 +23,7 @@ public final class ClientPointCommit {
     final ECP s;
 
     ClientPointCommit(VoteClientContext context) {
-        this.s = ECP.generator().mul(context.secretKey);
+        this.s = ECP.generator().mul(context.secretKey.core());
     }
 
     ClientPointCommit(IdentityUserEntry entry) {

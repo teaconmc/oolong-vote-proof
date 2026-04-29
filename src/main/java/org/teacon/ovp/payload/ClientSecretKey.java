@@ -23,7 +23,7 @@ public final class ClientSecretKey {
     final BIG s;
 
     ClientSecretKey(VoteClientContext ctx) {
-        this.s = new BIG(ctx.secretKey);
+        this.s = new BIG(ctx.secretKey.core());
     }
 
     ClientSecretKey(ByteBuf input) {

@@ -96,7 +96,7 @@ public final class IdentityBlindProof {
         BLS12381.pairingToIndexBE(rPairing, buf);
         this.c = BLS12381.hashToScalar(buf, buf.readableBytes());
         // z (scalar)
-        this.z = BLS12381.fieldMultiplyAdd(this.c, context.secretKey, r);
+        this.z = BLS12381.fieldMultiplyAdd(this.c, context.secretKey.core(), r);
     }
 
     IdentityBlindProof(ByteBuf input) {

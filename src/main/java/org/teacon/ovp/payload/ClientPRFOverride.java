@@ -29,7 +29,7 @@ public final class ClientPRFOverride {
     final String envelope;
 
     ClientPRFOverride(VoteClientContext context, String envelope) {
-        this.s = ECP.generator().mul(context.secretKey);
+        this.s = ECP.generator().mul(context.secretKey.core());
         this.envelope = envelope;
     }
 
