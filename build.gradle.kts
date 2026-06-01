@@ -25,3 +25,7 @@ java {
 tasks.test {
     useJUnitPlatform()
 }
+
+tasks.processResources {
+    from(file("LICENSE")) { into("META-INF/") }
+}
