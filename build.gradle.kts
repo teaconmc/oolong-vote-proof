@@ -1,5 +1,6 @@
 plugins {
     id("java-library")
+    id("maven-publish")
 }
 
 apply {
@@ -27,5 +28,46 @@ tasks.test {
 }
 
 tasks.processResources {
-    from(file("LICENSE")) { into("META-INF/") }
+    from(file("LICENSE")) { into("META-INF/").rename { "$it.txt" } }
+}
+
+publishing {
+    publications.create<MavenPublication>("mavenJava") {
+        groupId = "org.teacon"
+        artifactId = "oolong-vote-proof"
+        version = "${project.version}"
+        pom {
+            name.set("OolongVoteProof")
+            url.set("https://github.com/teaconmc/oolong-vote-proof")
+            description.set("Java implementation of a PS-signature-based anonymous voting and identifier scheme")
+            licenses {
+                license {
+                    name.set("GNU Lesser General Public License, Version 3.0")
+                    url.set("https://www.gnu.org/licenses/lgpl-3.0.txt")
+                }
+            }
+            developers {
+                developer {
+                    id.set("teaconmc")
+                    name.set("TeaConMC")
+                    email.set("contact@teacon.org")
+                }
+                developer {
+                    id.set("ustc-zzzz")
+                    name.set("Yanbing Zhao")
+                    email.set("zzzz.mail.ustc@gmail.com")
+                }
+            }
+            issueManagement {
+                system.set("GitHub Issues")
+                url.set("https://github.com/teaconmc/oolong-vote-proof/issues")
+            }
+            scm {
+                url.set("https://github.com/teaconmc/oolong-vote-proof")
+                connection.set("scm:git:git://github.com/teaconmc/oolong-vote-proof.git")
+                developerConnection.set("scm:git:ssh://github.com/teaconmc/oolong-vote-proof.git")
+            }
+        }
+        artifact(tasks.jar)
+    }
 }
