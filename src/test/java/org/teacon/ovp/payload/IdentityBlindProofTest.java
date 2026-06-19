@@ -73,6 +73,7 @@ class IdentityBlindProofTest {
         assertEquals(ID_DERIVATION_HEX, ByteBufUtil.hexDump(idDump));
         assertEquals(VOTE_INFO.levels(), proof.info().levels());
         assertEquals(VOTE_INFO.comments(), proof.info().comments());
+        assertEquals(sig.roles(), proof.signature().roles());
     }
 
     @Test

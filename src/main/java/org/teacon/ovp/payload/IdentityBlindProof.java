@@ -54,6 +54,10 @@ public final class IdentityBlindProof {
         return this.info;
     }
 
+    public IdentitySignature signature() {
+        return this.signature;
+    }
+
     public void dump(ByteBuf buf) {
         buf.writeLong(this.work.getMostSignificantBits()).writeLong(this.work.getLeastSignificantBits());
         this.id.dump(buf);
