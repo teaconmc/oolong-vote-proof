@@ -154,8 +154,8 @@ class VoteServerContextTest {
 
         var overrideBytes = Unpooled.wrappedBuffer(ByteBufUtil.decodeHexDump(PRF_OVERRIDES_HEX));
         var override = assertDoesNotThrow(() -> ClientPRFOverride.load(overrideBytes));
-        var entry = new IdentityUserEntry(USER_UUID, override, ROLES);
-        db.accounts.put(entry.uuid(), entry);
+        assertDoesNotThrow(() -> server.readPRFOverride(USER_UUID, override, ROLES).toCompletableFuture().join());
+        var entry = db.accounts.get(USER_UUID);
 
         assertEquals(USER_UUID, entry.uuid());
         assertEquals(ROLES, entry.roles());
@@ -325,6 +325,12 @@ class VoteServerContextTest {
             var before = this.votes.size();
             this.votes.removeIf(vote -> indexes.contains(vote.id().index()));
             return CompletableFuture.completedFuture(before - this.votes.size());
+        }
+
+        @Override
+        public CompletionStage<Void> storeAccount(IdentityUserEntry entry) {
+            this.accounts.put(entry.uuid(), entry);
+            return CompletableFuture.completedFuture(null);
         }
 
         @Override

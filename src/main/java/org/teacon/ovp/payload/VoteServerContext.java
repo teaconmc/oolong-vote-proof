@@ -25,9 +25,11 @@ import io.netty.buffer.Unpooled;
 import org.teacon.ovp.miracl.core.BLS12381.BIG;
 import org.teacon.ovp.storage.DBService;
 import org.teacon.ovp.util.BLS12381;
+import org.teacon.ovp.util.TagReference;
 
 import java.nio.CharBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
@@ -95,6 +97,10 @@ public final class VoteServerContext {
             }
             return new IdentitySignature(this.makeSecretKey(uuid), pointCommit, entry.roles(), this.rng);
         });
+    }
+
+    public CompletionStage<Void> readPRFOverride(UUID uuid, ClientPRFOverride override, Set<TagReference> roles) {
+        return this.service.storeAccount(new IdentityUserEntry(uuid, override, roles));
     }
 
     public CompletionStage<Void> readBlindProof(IdentityBlindProof proof) {
